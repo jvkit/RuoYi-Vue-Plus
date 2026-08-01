@@ -76,16 +76,25 @@
           </template>
         </el-table-column>
         <el-table-column label="AI审核意见" align="center" prop="aiOpinion" :show-overflow-tooltip="true" width="200" />
+        <el-table-column label="真伪状态" align="center" prop="verifyStatus" width="100">
+          <template #default="scope">
+            <el-tag :type="verifyStatusTag(scope.row.verifyStatus)">{{ verifyStatusText(scope.row.verifyStatus) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="财务查询单号" align="center" prop="finQueryNo" :show-overflow-tooltip="true" width="140" />
         <el-table-column label="备注" align="center" prop="remark" :show-overflow-tooltip="true" />
         <el-table-column label="创建时间" align="center" prop="createTime" width="180">
           <template #default="scope">
             <span>{{ proxy.parseTime(scope.row.createTime) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" align="center" width="150" class-name="small-padding fixed-width">
+        <el-table-column label="操作" align="center" width="200" class-name="small-padding fixed-width">
           <template #default="scope">
             <el-tooltip content="修改" placement="top">
               <el-button v-hasPermi="['invoice:info:edit']" link type="primary" icon="Edit" @click="handleUpdate(scope.row)"></el-button>
+            </el-tooltip>
+            <el-tooltip content="查验真伪" placement="top">
+              <el-button v-hasPermi="['invoice:info:edit']" link type="primary" icon="View" @click="handleVerify(scope.row)"></el-button>
             </el-tooltip>
             <el-tooltip content="删除" placement="top">
               <el-button v-hasPermi="['invoice:info:remove']" link type="primary" icon="Delete" @click="handleDelete(scope.row)"></el-button>
@@ -169,7 +178,7 @@
 </template>
 
 <script setup name="InvoiceInfo" lang="ts">
-import { listInvoiceInfo, getInvoiceInfo, delInvoiceInfo, addInvoiceInfo, updateInvoiceInfo } from '@/api/invoice/info';
+import { listInvoiceInfo, getInvoiceInfo, delInvoiceInfo, addInvoiceInfo, updateInvoiceInfo, verifyInvoice } from '@/api/invoice/info';
 import { InvoiceInfoForm, InvoiceInfoQuery, InvoiceInfoVO } from '@/api/invoice/info/types';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
@@ -225,6 +234,36 @@ const data = reactive<PageData<InvoiceInfoForm, InvoiceInfoQuery>>({
 });
 
 const { queryParams, form, rules } = toRefs(data);
+
+/** 真伪状态标签类型 */
+const verifyStatusTag = (status: string) => {
+  const map: Record<string, string> = {
+    unverified: 'info',
+    real: 'success',
+    fake: 'danger',
+    failed: 'warning'
+  };
+  return map[status] || 'info';
+};
+
+/** 真伪状态文本 */
+const verifyStatusText = (status: string) => {
+  const map: Record<string, string> = {
+    unverified: '未查验',
+    real: '真',
+    fake: '假',
+    failed: '失败'
+  };
+  return map[status] || '未查验';
+};
+
+/** 查验发票真伪 */
+const handleVerify = async (row: InvoiceInfoVO) => {
+  await proxy?.$modal.confirm('是否确认查验该发票的真伪？');
+  await verifyInvoice(row.id);
+  proxy?.$modal.msgSuccess('查验完成');
+  await getList();
+};
 
 /** 查询发票信息列表 */
 const getList = async () => {

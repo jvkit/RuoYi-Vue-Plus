@@ -104,4 +104,23 @@ public class InvoiceInfoVo implements Serializable {
     @ExcelProperty(value = "AI审核意见")
     private String aiOpinion;
 
+    /**
+     * 真伪状态
+     */
+    @ExcelProperty(value = "真伪状态")
+    private String verifyStatus;
+
+    /**
+     * 查验时间
+     */
+    @ExcelProperty(value = "查验时间")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private Date verifyTime;
+
+    /**
+     * 财务查询单号
+     */
+    @ExcelProperty(value = "财务查询单号")
+    private String finQueryNo;
+
 }

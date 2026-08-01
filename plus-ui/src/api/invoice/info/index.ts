@@ -92,3 +92,28 @@ export function extractInvoice(imageFile: File) {
     }
   });
 }
+
+// 查重：检查发票代码+号码是否已存在
+export function checkDuplicate(invoiceCode: string, invoiceNumber: string) {
+  return request({
+    url: '/invoice/info/check-duplicate',
+    method: 'get',
+    params: { invoiceCode, invoiceNumber }
+  });
+}
+
+// 查验发票真伪（mock）
+export function verifyInvoice(id: string | number) {
+  return request({
+    url: '/invoice/info/verify/' + id,
+    method: 'post'
+  });
+}
+
+// 财务查询单号反查
+export function queryByFinNo(finQueryNo: string) {
+  return request({
+    url: '/invoice/info/query/' + finQueryNo,
+    method: 'get'
+  });
+}

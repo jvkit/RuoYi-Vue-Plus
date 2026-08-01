@@ -79,13 +79,24 @@ public class InvoiceInfoController extends BaseController {
     }
 
     /**
-     * 新增发票信息
+     * 新增发票信息（自动查重 + 生成财务单号）
      */
     @SaCheckPermission("invoice:info:add")
     @Log(title = "发票信息", businessType = BusinessType.INSERT)
     @RepeatSubmit()
     @PostMapping()
     public R<InvoiceInfoVo> add(@Validated(AddGroup.class) @RequestBody InvoiceInfoBo bo) {
+        // 查重：发票代码+号码
+        if (bo.getInvoiceCode() != null && bo.getInvoiceNumber() != null) {
+            InvoiceInfoVo existing = invoiceInfoService.checkDuplicate(bo.getInvoiceCode(), bo.getInvoiceNumber());
+            if (existing != null) {
+                log.warn("发票重复上传: code={}, number={}, existingId={}", bo.getInvoiceCode(), bo.getInvoiceNumber(), existing.getId());
+                // 不拦截，但在返回中标记
+                InvoiceInfoVo result = invoiceInfoService.insertByBo(bo);
+                result.setRemark("⚠️该发票代码+号码已存在记录(ID:" + existing.getId() + ")，请注意核实");
+                return R.ok(result);
+            }
+        }
         return R.ok(invoiceInfoService.insertByBo(bo));
     }
 
@@ -199,5 +210,60 @@ public class InvoiceInfoController extends BaseController {
         data.put("aiOpinion", invoice.getAiOpinion());
         data.put("status", invoice.getStatus());
         return R.ok(data);
+    }
+
+    /**
+     * 查重：检查发票代码+号码是否已存在
+     */
+    @GetMapping("/check-duplicate")
+    public R<Map<String, Object>> checkDuplicate(@RequestParam String invoiceCode,
+                                                  @RequestParam String invoiceNumber) {
+        InvoiceInfoVo existing = invoiceInfoService.checkDuplicate(invoiceCode, invoiceNumber);
+        Map<String, Object> data = new HashMap<>();
+        data.put("isDuplicate", existing != null);
+        if (existing != null) {
+            data.put("duplicateId", existing.getId());
+            data.put("duplicateStatus", existing.getStatus());
+        }
+        return R.ok(data);
+    }
+
+    /**
+     * 查验发票真伪（mock：财务单号奇=真，偶=假）
+     */
+    @SaCheckPermission("invoice:info:edit")
+    @Log(title = "发票真伪查验", businessType = BusinessType.UPDATE)
+    @PostMapping("/verify/{id}")
+    public R<InvoiceInfoVo> verify(@NotNull(message = "主键不能为空")
+                                    @PathVariable Long id) {
+        InvoiceInfoVo result = invoiceInfoService.verifyInvoice(id);
+        if (result == null) {
+            return R.fail("发票不存在");
+        }
+        return R.ok(result);
+    }
+
+    /**
+     * 财务查询单号反查发票
+     */
+    @GetMapping("/query/{finQueryNo}")
+    public R<InvoiceInfoVo> queryByFinNo(@PathVariable String finQueryNo) {
+        // 直接通过 list 查询
+        InvoiceInfoBo bo = new InvoiceInfoBo();
+        // 用 LambdaQueryWrapper 不好直接查，这里用 mapper 查
+        var lqw = com.baomidou.mybatisplus.core.toolkit.Wrappers.<InvoiceInfo>lambdaQuery()
+            .eq(InvoiceInfo::getFinQueryNo, finQueryNo)
+            .last("LIMIT 1");
+        // 使用 service 的 queryList 不方便，直接用 checkDuplicate 类似的方式
+        // 这里简单处理：遍历查
+        List<InvoiceInfoVo> list = invoiceInfoService.queryList(new InvoiceInfoBo());
+        InvoiceInfoVo found = list.stream()
+            .filter(i -> finQueryNo.equals(i.getFinQueryNo()))
+            .findFirst()
+            .orElse(null);
+        if (found == null) {
+            return R.fail("未找到对应发票");
+        }
+        return R.ok(found);
     }
 }

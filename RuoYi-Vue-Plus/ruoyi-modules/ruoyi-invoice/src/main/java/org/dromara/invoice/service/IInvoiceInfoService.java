@@ -43,4 +43,14 @@ public interface IInvoiceInfoService {
      * 校验并批量删除发票信息
      */
     Boolean deleteWithValidByIds(List<Long> ids);
+
+    /**
+     * 查重：按发票代码+发票号码检查是否已存在
+     */
+    InvoiceInfoVo checkDuplicate(String invoiceCode, String invoiceNumber);
+
+    /**
+     * 查验发票真伪（mock：财务单号奇=真，偶=假）
+     */
+    InvoiceInfoVo verifyInvoice(Long id);
 }

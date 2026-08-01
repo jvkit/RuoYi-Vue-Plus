@@ -10,6 +10,9 @@ export interface InvoiceInfoVO extends BaseEntity {
   sellerName: string;
   buyerName: string;
   status: string;
+  verifyStatus: string;
+  verifyTime: string;
+  finQueryNo: string;
   remark: string;
 }
 
@@ -25,6 +28,9 @@ export interface InvoiceInfoForm {
   sellerName: string;
   buyerName: string;
   status: string;
+  verifyStatus: string;
+  verifyTime: string;
+  finQueryNo: string;
   remark: string;
 }
 

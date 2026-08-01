@@ -89,4 +89,19 @@ public class InvoiceInfo extends BaseEntity {
      */
     private String aiOpinion;
 
+    /**
+     * 真伪状态: unverified/real/fake/failed
+     */
+    private String verifyStatus;
+
+    /**
+     * 查验时间
+     */
+    private Date verifyTime;
+
+    /**
+     * 财务查询单号
+     */
+    private String finQueryNo;
+
 }

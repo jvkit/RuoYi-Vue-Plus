@@ -37,7 +37,7 @@
           >
             <el-button type="primary">选择发票图片</el-button>
             <template #tip>
-              <div class="el-upload__tip">支持 jpg/png 等图片格式，上传后点击“AI 识别”自动填表</div>
+              <div class="el-upload__tip">上传图片后可点击"AI 识别"自动填表，或直接手动填写下方表单</div>
             </template>
           </el-upload>
         </el-form-item>
@@ -48,9 +48,9 @@
           </el-button>
         </el-form-item>
 
-        <el-divider v-if="extracted" content-position="left">识别结果（可手动修正）</el-divider>
+        <el-divider content-position="left">发票信息（可手动填写或修正识别结果）</el-divider>
 
-        <el-row v-if="extracted" :gutter="20">
+        <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="发票代码" prop="invoiceCode">
               <el-input v-model="form.invoiceCode" placeholder="请输入发票代码" />
@@ -63,7 +63,7 @@
           </el-col>
         </el-row>
 
-        <el-row v-if="extracted" :gutter="20">
+        <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="发票类型" prop="invoiceType">
               <el-select v-model="form.invoiceType" placeholder="请选择发票类型" style="width: 100%">
@@ -78,7 +78,7 @@
           </el-col>
         </el-row>
 
-        <el-row v-if="extracted" :gutter="20">
+        <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="不含税金额" prop="amount">
               <el-input-number v-model="form.amount" :precision="2" :min="0" controls-position="right" style="width: 100%" />
@@ -91,7 +91,7 @@
           </el-col>
         </el-row>
 
-        <el-row v-if="extracted" :gutter="20">
+        <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="销售方" prop="sellerName">
               <el-input v-model="form.sellerName" placeholder="请输入销售方名称" />
@@ -104,11 +104,11 @@
           </el-col>
         </el-row>
 
-        <el-form-item v-if="extracted" label="备注" prop="remark">
+        <el-form-item label="备注" prop="remark">
           <el-input v-model="form.remark" type="textarea" placeholder="请输入备注" />
         </el-form-item>
 
-        <el-form-item v-if="extracted">
+        <el-form-item>
           <el-button type="success" :loading="submitting" @click="handleSubmit">
             确认并提交审核
           </el-button>
@@ -120,8 +120,9 @@
 </template>
 
 <script setup name="InvoiceEmployee" lang="ts">
-import { extractInvoice, addInvoiceInfo, aiReviewInvoice } from '@/api/invoice/info';
+import { extractInvoice, addInvoiceInfo, aiReviewInvoice, checkDuplicate } from '@/api/invoice/info';
 import { InvoiceInfoForm } from '@/api/invoice/info/types';
+import { ElMessageBox } from 'element-plus';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const { invoice_type } = toRefs<any>(proxy?.useDict('invoice_type'));
@@ -151,6 +152,9 @@ const initFormData: InvoiceInfoForm = {
   sellerName: '',
   buyerName: '',
   status: 'draft',
+  verifyStatus: '',
+  verifyTime: '',
+  finQueryNo: '',
   remark: ''
 };
 
@@ -241,7 +245,25 @@ const handleSubmit = () => {
 
     submitting.value = true;
     try {
-      // 1. 创建发票
+      // 1. 查重：检查发票代码+号码是否已存在
+      if (form.value.invoiceCode && form.value.invoiceNumber) {
+        const dupRes = await checkDuplicate(form.value.invoiceCode, form.value.invoiceNumber);
+        if (dupRes.data) {
+          try {
+            await ElMessageBox.confirm(
+              '该发票代码和号码已存在，是否仍要继续提交？',
+              '查重提示',
+              { confirmButtonText: '继续提交', cancelButtonText: '取消', type: 'warning' }
+            );
+          } catch {
+            // 用户取消
+            submitting.value = false;
+            return;
+          }
+        }
+      }
+
+      // 2. 创建发票
       const submitData = {
         ...form.value,
         totalAmount: Number(form.value.amount || 0) + Number(form.value.taxAmount || 0)
@@ -249,11 +271,11 @@ const handleSubmit = () => {
       const addRes = await addInvoiceInfo(submitData);
       const invoiceId = addRes.data.id;
 
-      // 2. 调用 AI 审核（携带同一张图片）
+      // 3. 调用 AI 审核（携带同一张图片）
       const reviewRes = await aiReviewInvoice(invoiceId, imageFile.value);
       const reviewData = reviewRes.data;
 
-      // 3. 显示最终结果
+      // 4. 显示最终结果
       result.status = reviewData.passed ? 'submitted' : 'rejected';
       result.aiOpinion = reviewData.opinion || '暂无审核意见';
       step.value = 2;
