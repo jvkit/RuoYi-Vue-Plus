@@ -1,0 +1,24 @@
+{
+  // ===== Java (Language Support for Java 扩展) =====
+  "java.configuration.updateBuildConfiguration": "automatic",
+  "java.import.maven.enabled": true,
+  "java.import.maven.offlineEnabled": true,
+  "java.project.importOnFirstTimeStartup": "automatic",
+  "java.project.importHint": false,
+
+  // 关闭 JDT null analysis（检测到依赖里的 JSpecify 注解后自动启用，对 MyBatis-Plus
+  // 泛型 lambda 产生大量 Null type safety 误报，见 redhat-developer/vscode-java#2716）
+  "java.compile.nullAnalysis.mode": "disabled",
+
+  // ===== 文件显示 =====
+  // 排除各模块的编译产物目录，避免 IDE 索引生成代码产生假报错
+  "files.exclude": {
+    "**/target": true
+  },
+  "search.exclude": {
+    "**/target": true
+  },
+  "files.watcherExclude": {
+    "**/target": true
+  }
+}
