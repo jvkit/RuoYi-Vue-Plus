@@ -104,6 +104,14 @@
           </el-col>
         </el-row>
 
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="关联订单" prop="orderNo">
+              <el-input v-model="form.orderNo" placeholder="请输入关联订单号（选填）" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
         <el-form-item label="备注" prop="remark">
           <el-input v-model="form.remark" type="textarea" placeholder="请输入备注" />
         </el-form-item>
@@ -155,6 +163,7 @@ const initFormData: InvoiceInfoForm = {
   verifyStatus: '',
   verifyTime: '',
   finQueryNo: '',
+  orderNo: '',
   remark: ''
 };
 
@@ -248,13 +257,32 @@ const handleSubmit = () => {
       // 1. 查重：检查发票代码+号码是否已存在
       if (form.value.invoiceCode && form.value.invoiceNumber) {
         const dupRes = await checkDuplicate(form.value.invoiceCode, form.value.invoiceNumber);
-        if (dupRes.data) {
+        const dup = dupRes.data;
+        if (dup && dup.isDuplicate) {
+          const statusMap: Record<string, string> = {
+            draft: '草稿',
+            submitted: '已提交',
+            approved: '已认证',
+            rejected: '已驳回'
+          };
+          const statusText = statusMap[dup.duplicateStatus] || dup.duplicateStatus || '未知';
+          const lines = [
+            `发票代码：${dup.duplicateInvoiceCode}`,
+            `发票号码：${dup.duplicateInvoiceNumber}`,
+            `状态：${statusText}`,
+            `销售方：${dup.duplicateSellerName || '—'}`,
+            `价税合计：${dup.duplicateTotalAmount ?? '—'}`,
+            dup.duplicateFinQueryNo ? `财务查询单号：${dup.duplicateFinQueryNo}` : null,
+            dup.duplicateOrderNo ? `⚠️ 该发票已在关联订单「${dup.duplicateOrderNo}」下提交` : null,
+            `记录ID：${dup.duplicateId}`
+          ].filter(Boolean);
+          const msg = `检测到重复发票，已有记录如下：\n\n${lines.join('\n')}\n\n是否仍要继续提交？`;
           try {
-            await ElMessageBox.confirm(
-              '该发票代码和号码已存在，是否仍要继续提交？',
-              '查重提示',
-              { confirmButtonText: '继续提交', cancelButtonText: '取消', type: 'warning' }
-            );
+            await ElMessageBox.confirm(msg, '查重提示 — 重复发票', {
+              confirmButtonText: '继续提交',
+              cancelButtonText: '取消',
+              type: 'warning'
+            });
           } catch {
             // 用户取消
             submitting.value = false;

@@ -123,4 +123,10 @@ public class InvoiceInfoVo implements Serializable {
     @ExcelProperty(value = "财务查询单号")
     private String finQueryNo;
 
+    /**
+     * 关联订单号
+     */
+    @ExcelProperty(value = "关联订单号")
+    private String orderNo;
+
 }

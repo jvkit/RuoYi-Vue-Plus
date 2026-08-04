@@ -13,6 +13,7 @@ export interface InvoiceInfoVO extends BaseEntity {
   verifyStatus: string;
   verifyTime: string;
   finQueryNo: string;
+  orderNo: string;
   remark: string;
 }
 
@@ -31,6 +32,7 @@ export interface InvoiceInfoForm {
   verifyStatus: string;
   verifyTime: string;
   finQueryNo: string;
+  orderNo: string;
   remark: string;
 }
 

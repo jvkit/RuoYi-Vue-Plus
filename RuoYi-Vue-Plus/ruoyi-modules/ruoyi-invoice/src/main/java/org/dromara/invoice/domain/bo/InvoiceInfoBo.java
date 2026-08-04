@@ -110,4 +110,9 @@ public class InvoiceInfoBo extends BaseEntity {
      */
     private String finQueryNo;
 
+    /**
+     * 关联订单号
+     */
+    private String orderNo;
+
 }

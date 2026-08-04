@@ -8,6 +8,25 @@
 - 前端：`/home/jvkit/workspace/oa/plus-ui`（版本 5.6.2-2.6.2）
 - 前端是官方仓库，GitHub 账号已由 `JavaLionLi` 改名为 `CrazyLionCat`，代码本身与后端版本一一对应。
 
+## 根目录结构速查
+
+```
+/home/jvkit/workspace/oa/
+├── RuoYi-Vue-Plus/        # 后端 Java 代码（Spring Boot）
+├── plus-ui/                 # 前端 Vue3 代码
+├── docs/                    # 教学文档、经验总结
+├── scripts/                 # Python 辅助脚本（Dify 配置、模型管理、发票图片生成等）
+├── logs/                    # 后端运行日志
+├── test-invoices/           # 发票识别测试图片
+├── ruoyi-api-docs.html      # 离线 API 文档（ReDoc）
+└── ruoyi-api-docs.json      # 离线 OpenAPI JSON
+```
+
+注意：
+- `RuoYi-Vue-Plus` 是**后端**，名字里的 `Vue` 只是项目名，不是前端代码。
+- `plus-ui` 才是**前端**。
+- 新增辅助脚本、一次性工具脚本统一放到 `scripts/`，不要再放根目录，保持根目录整洁。
+
 ## 教学文档
 
 详细的学习/讲解文档统一放在：

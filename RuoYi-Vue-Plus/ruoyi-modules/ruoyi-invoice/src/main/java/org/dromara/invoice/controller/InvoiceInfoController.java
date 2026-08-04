@@ -223,7 +223,13 @@ public class InvoiceInfoController extends BaseController {
         data.put("isDuplicate", existing != null);
         if (existing != null) {
             data.put("duplicateId", existing.getId());
+            data.put("duplicateInvoiceCode", existing.getInvoiceCode());
+            data.put("duplicateInvoiceNumber", existing.getInvoiceNumber());
             data.put("duplicateStatus", existing.getStatus());
+            data.put("duplicateSellerName", existing.getSellerName());
+            data.put("duplicateTotalAmount", existing.getTotalAmount());
+            data.put("duplicateFinQueryNo", existing.getFinQueryNo());
+            data.put("duplicateOrderNo", existing.getOrderNo());
         }
         return R.ok(data);
     }
