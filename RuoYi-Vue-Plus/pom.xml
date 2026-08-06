@@ -357,6 +357,13 @@
                 <version>${revision}</version>
             </dependency>
 
+            <!--  采购管理模块  -->
+            <dependency>
+                <groupId>org.dromara</groupId>
+                <artifactId>ruoyi-procurement</artifactId>
+                <version>${revision}</version>
+            </dependency>
+
             <!--  工作流模块  -->
             <dependency>
                 <groupId>org.dromara</groupId>

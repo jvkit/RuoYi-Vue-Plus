@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.dromara.procurement.mapper.PmsBomItemMapper">
+
+    <resultMap type="org.dromara.procurement.domain.vo.PmsBomItemVo" id="PmsBomItemResult">
+        <id property="id" column="id"/>
+        <result property="projectId" column="project_id"/>
+        <result property="projectName" column="project_name"/>
+        <result property="category" column="category"/>
+        <result property="name" column="name"/>
+        <result property="spec" column="spec"/>
+        <result property="brand" column="brand"/>
+        <result property="qty" column="qty"/>
+        <result property="unit" column="unit"/>
+        <result property="estPrice" column="est_price"/>
+        <result property="estTotal" column="est_total"/>
+        <result property="supplierId" column="supplier_id"/>
+        <result property="supplierName" column="supplier_name"/>
+        <result property="status" column="status"/>
+        <result property="remark" column="remark"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateTime" column="update_time"/>
+    </resultMap>
+
+    <select id="selectVoPageList" resultMap="PmsBomItemResult">
+        SELECT
+            bi.*,
+            p.project_name,
+            s.supplier_name
+        FROM pms_bom_item bi
+        LEFT JOIN pms_project p ON bi.project_id = p.id AND p.del_flag = '0'
+        LEFT JOIN pms_supplier s ON bi.supplier_id = s.id AND s.del_flag = '0'
+        <where>
+            AND bi.del_flag = '0'
+            <if test="bo.projectId != null">
+                AND bi.project_id = #{bo.projectId}
+            </if>
+            <if test="bo.category != null and bo.category != ''">
+                AND bi.category LIKE CONCAT('%', #{bo.category}, '%')
+            </if>
+            <if test="bo.name != null and bo.name != ''">
+                AND bi.name LIKE CONCAT('%', #{bo.name}, '%')
+            </if>
+            <if test="bo.brand != null and bo.brand != ''">
+                AND bi.brand LIKE CONCAT('%', #{bo.brand}, '%')
+            </if>
+            <if test="bo.supplierId != null">
+                AND bi.supplier_id = #{bo.supplierId}
+            </if>
+            <if test="bo.status != null">
+                AND bi.status = #{bo.status}
+            </if>
+            <if test="bo.params.beginCreateTime != null and bo.params.endCreateTime != null">
+                AND bi.create_time BETWEEN #{bo.params.beginCreateTime} AND #{bo.params.endCreateTime}
+            </if>
+        </where>
+        ORDER BY bi.create_time DESC
+    </select>
+
+</mapper>

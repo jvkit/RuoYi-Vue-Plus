@@ -1,0 +1,74 @@
+{
+  "folders": [
+    {
+      "path": "RuoYi-Vue-Plus",
+      "name": "后端 (RuoYi-Vue-Plus)"
+    },
+    {
+      "path": "plus-ui",
+      "name": "前端 (plus-ui)"
+    },
+    {
+      "path": ".",
+      "name": "根目录"
+    }
+  ],
+  "settings": {
+    "java.configuration.updateBuildConfiguration": "automatic",
+    "java.import.maven.enabled": true,
+    "java.import.maven.offlineEnabled": true,
+    "java.project.importOnFirstTimeStartup": "automatic",
+    "java.compile.nullAnalysis.mode": "disabled",
+    "files.exclude": {
+      "**/target": true
+    },
+    "search.exclude": {
+      "**/target": true
+    },
+    "files.watcherExclude": {
+      "**/target": true
+    },
+    "problems.decorations.enabled": false,
+    "gitlens.decorations.enabled": false,
+    "explorer.decorations.colors": false,
+    "explorer.decorations.badges": true
+  },
+  "launch": {
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "type": "java",
+        "name": "DromaraApplication",
+        "request": "launch",
+        "mainClass": "org.dromara.DromaraApplication",
+        "projectName": "ruoyi-admin",
+        "cwd": "${workspaceFolder:RuoYi-Vue-Plus}",
+        "args": ["--sa-token.timeout=31536000"],
+        "preLaunchTask": "mvn-install-ruoyi",
+        "console": "integratedTerminal"
+      }
+    ]
+  },
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "mvn-install-ruoyi",
+        "type": "shell",
+        "command": "mvn",
+        "args": ["install", "-DskipTests"],
+        "options": {
+          "cwd": "${workspaceFolder:RuoYi-Vue-Plus}"
+        },
+        "group": "build",
+        "presentation": {
+          "echo": true,
+          "reveal": "always",
+          "focus": false,
+          "panel": "shared"
+        },
+        "problemMatcher": []
+      }
+    ]
+  }
+}

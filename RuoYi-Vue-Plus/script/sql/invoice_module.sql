@@ -27,24 +27,28 @@ VALUES
 
 -- 菜单：发票管理目录
 INSERT INTO sys_menu (menu_id, menu_name, parent_id, order_num, path, component, query_param, is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time, remark)
-VALUES (12007, '发票管理', 0, 9, 'invoice', '', '', 1, 0, 'M', '0', '0', '', 'ticket', 1, sysdate(), '发票管理目录');
+VALUES (12060, '发票管理', 0, 9, 'invoice', '', '', 1, 0, 'M', '0', '0', '', 'ticket', 1, sysdate(), '发票管理目录');
 
 -- 菜单：发票信息管理
 INSERT INTO sys_menu (menu_id, menu_name, parent_id, order_num, path, component, query_param, is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time, remark)
-VALUES (12008, '发票信息', 12007, 1, 'info', 'invoice/info/index', '', 1, 0, 'C', '0', '0', 'invoice:info:list', 'edit', 1, sysdate(), '发票信息菜单');
+VALUES (12061, '发票信息', 12060, 1, 'info', 'invoice/info/index', '', 1, 0, 'C', '0', '0', 'invoice:info:list', 'edit', 1, sysdate(), '发票信息菜单');
 
 -- 按钮权限
 INSERT INTO sys_menu (menu_id, menu_name, parent_id, order_num, path, component, query_param, is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time, remark)
-VALUES (12009, '发票信息查询', 12008, 1, '#', '', '', 1, 0, 'F', '0', '0', 'invoice:info:query', '#', 1, sysdate(), '');
+VALUES (12062, '发票信息查询', 12061, 1, '#', '', '', 1, 0, 'F', '0', '0', 'invoice:info:query', '#', 1, sysdate(), '');
 
 INSERT INTO sys_menu (menu_id, menu_name, parent_id, order_num, path, component, query_param, is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time, remark)
-VALUES (12010, '发票信息新增', 12008, 2, '#', '', '', 1, 0, 'F', '0', '0', 'invoice:info:add', '#', 1, sysdate(), '');
+VALUES (12063, '发票信息新增', 12061, 2, '#', '', '', 1, 0, 'F', '0', '0', 'invoice:info:add', '#', 1, sysdate(), '');
 
 INSERT INTO sys_menu (menu_id, menu_name, parent_id, order_num, path, component, query_param, is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time, remark)
-VALUES (12011, '发票信息修改', 12008, 3, '#', '', '', 1, 0, 'F', '0', '0', 'invoice:info:edit', '#', 1, sysdate(), '');
+VALUES (12064, '发票信息修改', 12061, 3, '#', '', '', 1, 0, 'F', '0', '0', 'invoice:info:edit', '#', 1, sysdate(), '');
 
 INSERT INTO sys_menu (menu_id, menu_name, parent_id, order_num, path, component, query_param, is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time, remark)
-VALUES (12012, '发票信息删除', 12008, 4, '#', '', '', 1, 0, 'F', '0', '0', 'invoice:info:remove', '#', 1, sysdate(), '');
+VALUES (12065, '发票信息删除', 12061, 4, '#', '', '', 1, 0, 'F', '0', '0', 'invoice:info:remove', '#', 1, sysdate(), '');
 
 INSERT INTO sys_menu (menu_id, menu_name, parent_id, order_num, path, component, query_param, is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time, remark)
-VALUES (12013, '发票信息导出', 12008, 5, '#', '', '', 1, 0, 'F', '0', '0', 'invoice:info:export', '#', 1, sysdate(), '');
+VALUES (12066, '发票信息导出', 12061, 5, '#', '', '', 1, 0, 'F', '0', '0', 'invoice:info:export', '#', 1, sysdate(), '');
+
+-- 菜单：发票提交（员工上传与 AI 识别）
+INSERT INTO sys_menu (menu_id, menu_name, parent_id, order_num, path, component, query_param, is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time, remark)
+VALUES (12067, '发票提交', 12060, 2, 'employee', 'invoice/employee/index', '', 1, 0, 'C', '0', '0', 'invoice:employee:list', 'upload', 1, sysdate(), '发票提交菜单');

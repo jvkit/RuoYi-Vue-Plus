@@ -99,6 +99,12 @@
             <artifactId>ruoyi-invoice</artifactId>
         </dependency>
 
+        <!--  采购管理模块  -->
+        <dependency>
+            <groupId>org.dromara</groupId>
+            <artifactId>ruoyi-procurement</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>de.codecentric</groupId>
             <artifactId>spring-boot-admin-starter-client</artifactId>
@@ -139,6 +145,35 @@
                     </execution>
                 </executions>
             </plugin>
+
+            <!-- 修复 mapstruct-plus 在聚合模块重复生成其他子模块 MapperImpl 导致 ClassFormatError -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <delete quiet="true">
+                                    <fileset dir="${project.build.outputDirectory}/org/dromara/common" includes="**/*MapperImpl.class"/>
+                                    <fileset dir="${project.build.outputDirectory}/org/dromara/system" includes="**/*MapperImpl.class"/>
+                                    <fileset dir="${project.build.outputDirectory}/org/dromara/workflow" includes="**/*MapperImpl.class"/>
+                                    <fileset dir="${project.build.outputDirectory}/org/dromara/generator" includes="**/*MapperImpl.class"/>
+                                    <fileset dir="${project.build.outputDirectory}/org/dromara/job" includes="**/*MapperImpl.class"/>
+                                    <fileset dir="${project.build.outputDirectory}/org/dromara/demo" includes="**/*MapperImpl.class"/>
+                                    <fileset dir="${project.build.outputDirectory}/org/dromara/invoice" includes="**/*MapperImpl.class"/>
+                                </delete>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
