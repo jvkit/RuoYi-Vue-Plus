@@ -31,3 +31,10 @@ set_dify_model.py
 uninstall_openai.py
 update_vision*.py
 get_model_schema.py
+
+# 演示视频前的 checkpoint 排除项（本地环境/副本/临时工具）
+.venv-pptx/
+logs/
+plus-ui-6x/
+ruoyi-6x/
+scripts/demo-video/

@@ -23,9 +23,11 @@
   },
 
   // ===== Git 状态与问题染色分离 =====
-  // 关闭 VSCode 资源管理器里因代码报错导致的红色/黄色染色，
-  // 让左侧目录树只显示 git 状态（M 黄色 / U 绿色 / D 红色），
-  // 不再被 TypeScript/Java 等诊断淹没。
-  // 问题本身仍可在 Ctrl+Shift+M Problems 面板查看。
-  "problems.decorations.enabled": false
+  // 彻底关闭资源管理器里因 TypeScript/Java 等诊断产生的颜色+徽章装饰，
+  // 只保留 git 本身的 M/U/D 字母徽章，让目录树清晰显示代码改动。
+  // 问题本身仍可在 Ctrl+Shift+M Problems 面板查看，不影响 AI 读报错。
+  "problems.decorations.enabled": false,
+  "gitlens.decorations.enabled": false,
+  "explorer.decorations.colors": false,
+  "explorer.decorations.badges": true
 }
