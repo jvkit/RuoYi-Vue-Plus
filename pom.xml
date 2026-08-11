@@ -449,6 +449,11 @@
                 <artifactId>ruoyi-workflow</artifactId>
                 <version>${revision}</version>
             </dependency>
+            <dependency>
+                <groupId>org.dromara</groupId>
+                <artifactId>ruoyi-procurement</artifactId>
+                <version>${revision}</version>
+            </dependency>
 
             <!--  api模块  -->
             <dependency>
