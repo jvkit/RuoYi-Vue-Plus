@@ -37,7 +37,6 @@ public class PmsSupplierBo extends BaseEntity {
     /**
      * 供应商编码
      */
-    @NotBlank(message = "供应商编码不能为空", groups = {AddGroup.class, EditGroup.class})
     private String supplierCode;
 
     /**
@@ -45,6 +44,16 @@ public class PmsSupplierBo extends BaseEntity {
      */
     @NotBlank(message = "供应商名称不能为空", groups = {AddGroup.class, EditGroup.class})
     private String supplierName;
+
+    /**
+     * 平台（淘宝/天猫/京东/拼多多/1688/抖音/其他）
+     */
+    private String platform;
+
+    /**
+     * 店铺/商品链接
+     */
+    private String link;
 
     /**
      * 联系人

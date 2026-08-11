@@ -39,6 +39,16 @@ public class PmsSupplier extends BaseEntity {
     private String supplierName;
 
     /**
+     * 平台（淘宝/天猫/京东/拼多多/1688/抖音/其他）
+     */
+    private String platform;
+
+    /**
+     * 店铺/商品链接
+     */
+    private String link;
+
+    /**
      * 联系人
      */
     private String contactName;

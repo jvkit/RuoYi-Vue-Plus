@@ -30,6 +30,7 @@ import org.dromara.procurement.domain.vo.PmsProcurementRequestVo;
 import org.dromara.procurement.mapper.PmsProcurementRequestItemMapper;
 import org.dromara.procurement.mapper.PmsProcurementRequestMapper;
 import org.dromara.procurement.service.IPmsProcurementRequestService;
+import org.dromara.procurement.utils.PmsPlatformUtil;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -232,6 +233,10 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
             if (ObjectUtil.isNull(item.getSortNo())) {
                 item.setSortNo(sort++);
             }
+            // 有链接且未识别平台时自动识别（把平台视为供应商）
+            if (StringUtils.isBlank(item.getPlatform()) && StringUtils.isNotBlank(item.getLink())) {
+                item.setPlatform(PmsPlatformUtil.detectPlatform(item.getLink()));
+            }
             calcItemAmount(item);
             items.add(item);
         }
@@ -289,42 +294,52 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
             throw new ServiceException("采购申请不存在");
         }
         try {
-            ClassPathResource tpl = new ClassPathResource("templates/采购申请模板.xlsx");
+            ClassPathResource tpl = new ClassPathResource("templates/采购申请单模板.xlsx");
             try (Workbook wb = WorkbookFactory.create(tpl.getInputStream())) {
                 Sheet sheet = wb.getSheetAt(0);
-                // 申请部门 B3、申请人 D3
-                String deptName = ObjectUtil.isNull(LoginHelper.getLoginUser())
-                    ? "" : LoginHelper.getLoginUser().getDeptName();
-                if (deptName == null) {
-                    deptName = "";
+                // 申请人填 C3（合并区域左上角）
+                setCell(sheet, 2, 2, LoginHelper.getUsername());
+                // 清空模板示例/旧数据行（第8行起，索引7）
+                int start = 7;
+                int lastRow = sheet.getLastRowNum();
+                for (int r = start; r <= lastRow; r++) {
+                    Row row = sheet.getRow(r);
+                    if (row != null) {
+                        sheet.removeRow(row);
+                    }
                 }
-                setCell(sheet, 2, 1, deptName);
-                setCell(sheet, 2, 3, LoginHelper.getUsername());
-                // 明细从第6行（索引5）开始
+                // 写明细（对齐真模板 Tabelle1 16 列）
                 List<PmsProcurementRequestItemVo> items = vo.getItems();
+                String username = LoginHelper.getUsername();
+                String projectName = vo.getProjectName();
                 if (CollUtil.isNotEmpty(items)) {
-                    int rowIdx = 5;
+                    int rowIdx = start;
                     int seq = 1;
                     for (PmsProcurementRequestItemVo item : items) {
                         BigDecimal qty = ObjectUtil.isNull(item.getQuantity()) ? BigDecimal.ZERO : item.getQuantity();
                         BigDecimal price = ObjectUtil.isNull(item.getUnitPrice()) ? BigDecimal.ZERO : item.getUnitPrice();
-                        BigDecimal actual = ObjectUtil.isNull(item.getAmount()) ? qty.multiply(price) : item.getAmount();
-                        BigDecimal prepay = actual.multiply(new BigDecimal("1.03")).setScale(2, java.math.RoundingMode.HALF_UP);
-                        setCell(sheet, rowIdx, 0, seq++);                          // A 序号
-                        setCell(sheet, rowIdx, 1, deptName);                       // B 工作室/部门
-                        setCell(sheet, rowIdx, 2, item.getItemName());             // C 品名
-                        setCell(sheet, rowIdx, 3, item.getSpec());                 // D 规格型号
-                        setCell(sheet, rowIdx, 4, item.getBrand());                // E 品牌
-                        setCell(sheet, rowIdx, 5, qty.doubleValue());              // F 数量
-                        setCell(sheet, rowIdx, 6, item.getUnit());                 // G 单位
-                        setCell(sheet, rowIdx, 7, price.doubleValue());            // H 单价
-                        setCell(sheet, rowIdx, 8, actual.doubleValue());           // I 实际总价
-                        setCell(sheet, rowIdx, 9, prepay.doubleValue());           // J 预付总价
+                        BigDecimal amount = ObjectUtil.isNull(item.getAmount()) ? qty.multiply(price) : item.getAmount();
+                        setCell(sheet, rowIdx, 0, seq++);              // A 序号
+                        setCell(sheet, rowIdx, 1, item.getPurchaseType());   // B 采购种类
+                        setCell(sheet, rowIdx, 2, item.getCategory1());      // C 一级分类
+                        setCell(sheet, rowIdx, 3, item.getCategory2());      // D 二级分类
+                        setCell(sheet, rowIdx, 4, item.getProjectBelong());  // E 项目归属
+                        setCell(sheet, rowIdx, 5, item.getItemName()); // F 品名
+                        setCell(sheet, rowIdx, 6, item.getUnit());     // G 单位
+                        setCell(sheet, rowIdx, 7, qty.doubleValue());  // H 数量
+                        setCell(sheet, rowIdx, 8, item.getSpec());     // I 规格型号
+                        setCell(sheet, rowIdx, 9, item.getBrand());    // J 参考品牌
+                        setCell(sheet, rowIdx, 10, price.doubleValue());   // K 单价
+                        setCell(sheet, rowIdx, 11, amount.doubleValue()); // L 预估总价
+                        setCell(sheet, rowIdx, 13, username);          // N 保管人
+                        setCell(sheet, rowIdx, 14, username);          // O 使用人
+                        setCell(sheet, rowIdx, 15, vo.getApplyReason()); // P 采购理由
                         rowIdx++;
                     }
                 }
                 response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-                String filename = "采购申请表_" + vo.getRequestCode() + ".xlsx";
+                String title = StringUtils.isNotBlank(vo.getTitle()) ? vo.getTitle() : vo.getRequestCode();
+                String filename = "采购申请表_" + title + ".xlsx";
                 String encoded = URLEncoder.encode(filename, StandardCharsets.UTF_8);
                 response.setHeader("Content-Disposition", "attachment; filename=\"" + encoded + "\"; filename*=UTF-8''" + encoded);
                 try (OutputStream os = response.getOutputStream()) {

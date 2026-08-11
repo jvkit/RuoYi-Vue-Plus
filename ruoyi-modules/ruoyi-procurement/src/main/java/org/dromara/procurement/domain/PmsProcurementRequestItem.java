@@ -35,6 +35,26 @@ public class PmsProcurementRequestItem extends BaseEntity {
     private Long requestId;
 
     /**
+     * 采购种类（科研类/非科研类，默认科研类）
+     */
+    private String purchaseType;
+
+    /**
+     * 一级分类
+     */
+    private String category1;
+
+    /**
+     * 二级分类
+     */
+    private String category2;
+
+    /**
+     * 项目归属
+     */
+    private String projectBelong;
+
+    /**
      * 品名
      */
     private String itemName;
@@ -78,6 +98,21 @@ public class PmsProcurementRequestItem extends BaseEntity {
      * 排序号
      */
     private Integer sortNo;
+
+    /**
+     * 商品链接
+     */
+    private String link;
+
+    /**
+     * 平台（识别自链接，视为供应商）
+     */
+    private String platform;
+
+    /**
+     * 供应商ID（明细级，非必填）
+     */
+    private Long supplierId;
 
     /**
      * 备注

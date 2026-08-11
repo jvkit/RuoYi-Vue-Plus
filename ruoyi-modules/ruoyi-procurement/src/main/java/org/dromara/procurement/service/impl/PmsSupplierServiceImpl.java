@@ -64,6 +64,10 @@ public class PmsSupplierServiceImpl implements IPmsSupplierService {
     @Override
     public Boolean insertByBo(PmsSupplierBo bo) {
         PmsSupplier add = MapstructUtils.convert(bo, PmsSupplier.class);
+        // 编码可空，为空时自动生成
+        if (StringUtils.isBlank(add.getSupplierCode())) {
+            add.setSupplierCode("SUP-" + System.currentTimeMillis());
+        }
         validEntityBeforeSave(add);
         boolean flag = baseMapper.insert(add) > 0;
         if (flag) {

@@ -45,7 +45,6 @@ public class PmsProcurementRequestBo extends BaseEntity {
     /**
      * 申请标题
      */
-    @NotBlank(message = "申请标题不能为空", groups = {AddGroup.class, EditGroup.class})
     private String title;
 
     /**
