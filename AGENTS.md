@@ -1,220 +1,310 @@
 # 工作区指引
 
-本工作区包含 RuoYi-Vue-Plus 后端与 plus-ui 前端，用于学习、二次开发以及采购/SOP 流程的扩展。
+本工作区是一个 **OA 协同办公系统**的学习、二次开发与扩展项目，基于 **RuoYi-Vue-Plus**（多租户中后台管理脚手架）搭建，在其上扩展了采购（SOP）流程与发票 AI 审核等业务。
 
-## 仓库位置
+这里同时存放**两套版本的代码**：一套是**当前生产运行**的 5.6.2（后端 `RuoYi-Vue-Plus` + 前端 `plus-ui`，带自定义业务模块）；另一套是**只读参考**的官方 6.0.0（后端 `ruoyi-6x` + 前端 `plus-ui-6x`，纯上游、无自定义模块），用于评估未来升级。
 
-- 后端：`/home/jvkit/workspace/oa/RuoYi-Vue-Plus`（版本 5.6.2）
-- 前端：`/home/jvkit/workspace/oa/plus-ui`（版本 5.6.2-2.6.2）
-- 前端是官方仓库，GitHub 账号已由 `JavaLionLi` 改名为 `CrazyLionCat`，代码本身与后端版本一一对应。
+阅读本文件的 AI 代理：下面的信息面向对本项目一无所知的读者，可按"总览 → 技术栈 → 目录 → 构建/运行 → 自定义模块 → Dify 集成 → 数据库 → 部署 → 脚本 → 文档 → 约定"的顺序理解。
 
-## 根目录结构速查
+---
+
+## 1. 项目总览
+
+| 项 | 说明 |
+|---|---|
+| 后端 | Spring Boot 3 + MyBatis-Plus + Sa-Token + Warm-Flow（多租户中后台） |
+| 前端 | Vue 3 + TypeScript + Element Plus + Vite + Pinia + vxe-table |
+| 业务扩展 | 发票管理（含 AI 识别/审核/查重）、采购管理（项目/供应商/BOM/申请/订单） |
+| 生产运行版本 | 后端 `RuoYi-Vue-Plus` 5.6.2 / 前端 `plus-ui` 5.6.2-2.6.2 |
+| 参考升级版本 | `ruoyi-6x` 6.0.0 / `plus-ui-6x` 6.0.0（纯上游，未用于生产） |
+
+## 2. 根目录结构速查
 
 ```
 /home/jvkit/workspace/oa/
-├── RuoYi-Vue-Plus/        # 后端 Java 代码（Spring Boot）
-├── plus-ui/                 # 前端 Vue3 代码
-├── docs/                    # 教学文档、经验总结
-├── scripts/                 # Python 辅助脚本（Dify 配置、模型管理、发票图片生成等）
-├── logs/                    # 后端运行日志
-├── test-invoices/           # 发票识别测试图片
-├── ruoyi-api-docs.html      # 离线 API 文档（ReDoc）
-└── ruoyi-api-docs.json      # 离线 OpenAPI JSON
+├── RuoYi-Vue-Plus/        # 后端 Java 代码（Spring Boot 5.6.2，生产）
+├── plus-ui/                 # 前端 Vue3 代码（5.6.2-2.6.2，生产）
+├── ruoyi-6x/                # 后端 6.0.0（已迁移采购模块 procurement）
+├── plus-ui-6x/              # 前端 6.0.0（已迁移采购页面 procurement）
+├── docs/                    # 教学文档 + 工作报告（dify/发票/6X升级评估）
+├── scripts/                 # Python 辅助脚本（Dify 配置、发票图片生成、演示视频）
+├── logs/                    # 后端/前端运行日志
+├── test-invoices/           # 发票识别测试图片（good/bad_invoice.png）
+├── ruoyi-api-docs.html/json # 离线 OpenAPI 文档
+└── oa.code-workspace        # VSCode 多根工作区
 ```
 
 注意：
-- `RuoYi-Vue-Plus` 是**后端**，名字里的 `Vue` 只是项目名，不是前端代码。
+- `RuoYi-Vue-Plus` 是**后端**，名字里的 `Vue` 只是项目名。
 - `plus-ui` 才是**前端**。
-- 新增辅助脚本、一次性工具脚本统一放到 `scripts/`，不要再放根目录，保持根目录整洁。
+- `ruoyi-6x` / `plus-ui-6x` 是同一外层 Git 仓库的两个 checkout（git worktree / 嵌套 .git），被外层 `.gitignore` 忽略，**不是**生产代码。
+- 新增辅助脚本、一次性工具脚本统一放到 `scripts/`，保持根目录整洁。
 
-## 教学文档
+## 3. 技术栈
 
-详细的学习/讲解文档统一放在：
+### 后端（RuoYi-Vue-Plus 5.6.2）
+- **Java 17**，Spring Boot **3.5.15**，Maven 多模块，groupId `org.dromara`，version `${revision}=5.6.2`
+- 关键依赖版本：MyBatis-Plus 3.5.16、Sa-Token 1.45.0（认证/授权，非 Spring Security）、Redisson 3.52.0、dynamic-datasource 4.3.1、Warm-Flow 1.8.5（工作流）、MapStruct-Plus 1.5.0（BO/VO 映射）、SnailJob 1.10.0（分布式任务）、Hutool 5.8.43
+- Web 容器：Undertow；接口加密（AES+RSA，dev 环境关闭）；多租户、数据权限、逻辑删除默认开启
+- 打包默认 `skipTests=true`
+
+### 前端（plus-ui 5.6.2-2.6.2）
+- Vue 3.5.30、TypeScript ~5.9.3、Vite 7.3.2、Element Plus 2.13.5、vxe-table 4.18.1、Pinia 3.0.4、vue-router 5.0.3、axios 1.13.6、UnoCSS 66.6.6
+- 包管理器 **pnpm**（有 `pnpm-lock.yaml`、`pnpm-workspace.yaml`）
+- 开发端口 `VITE_APP_PORT=8081`，dev 代理 `/dev-api` → `http://127.0.0.1:8088`（后端）；生产 `/prod-api`、端口 80
+- 传输加密：dev `VITE_APP_ENCRYPT=false`，生产 `true`（AES+RSA）
+
+### 6.0.0 参考版差异（对比 5.6.2）
+- 后端：Java **21**、Spring Boot **4.1.0**；`ruoyi-generator` 改名 `ruoyi-gen`；新增 `ruoyi-ai`、`ruoyi-common-mcp/mqtt/elasticsearch/liteflow/push/ai`、`ruoyi-extend/ruoyi-snailai-server`；**移除多租户**与 `ruoyi-invoice`；新增 `ruoyi-api` 模块做跨模块 API 契约。**采购扩展已迁移**（见 6.2 与 `docs/采购模块6X迁移报告.md`），发票未迁移。
+- 前端：Vite 8（Rolldown）、TypeScript 6、Pinia 4、Element Plus 2.14.3；ESLint/Prettier 换成 **oxlint/oxfmt**；新增 `hooks/` 组合层；新增 `gen/`（FreeMarker 代码生成模板）。dev 代理默认指向 8080（本机后端实际跑在 8088，6x 未适配）。
+
+## 4. 后端结构（RuoYi-Vue-Plus）
+
+### Maven 模块
+- `ruoyi-admin`：web 入口，聚合所有业务模块，`mvn package` 产出可执行 jar `ruoyi-admin/target/ruoyi-admin.jar`；主类 `org.dromara.DromaraApplication`
+- `ruoyi-common`：基础能力，`ruoyi-common-core/mybatis/redis/satoken/security/tenant/log/excel/translation/web/idempotent/ratelimiter/oss/mail/sms/sensitive/encrypt/json/sse/websocket/social/doc/bom/job` 等
+- `ruoyi-modules`：业务模块
+  - **stock（上游自带）**：`ruoyi-system`、`ruoyi-generator`、`ruoyi-job`、`ruoyi-demo`、`ruoyi-workflow`（Warm-Flow，示例 `TestLeave`）
+  - **custom（本项目新增）**：`ruoyi-invoice`（发票）、`ruoyi-procurement`（采购，PMS 一套）
+- `ruoyi-extend`：`ruoyi-monitor-admin`（Spring Boot Admin 服务端）、`ruoyi-snailjob-server`（任务调度服务端）
+
+### 配置文件（`ruoyi-admin/src/main/resources/`）
+- `application.yml`：主配置（端口、Sa-Token、租户、MyBatis-Plus、warm-flow、springdoc 分组）
+- `application-dev.yml` / `application-prod.yml`：环境配置（数据源、Redis、**Dify**、邮件、短信）
+- 激活 profile 由根 pom 的 `@profiles.active@` 注入，默认 `dev`
+
+### 数据库访问约定
+- ORM：MyBatis-Plus；Mapper 继承 `BaseMapperPlus<T, V>`（提供 `selectVoById/selectVoList/selectVoPage` 等）
+- 实体继承 `org.dromara.common.mybatis.core.domain.BaseEntity`（含 create_by/time、update_by/time、del_flag、tenant_id）
+- Mapper XML：`resources/mapper/<模块>/<Entity>Mapper.xml`；`@MapperScan("${mybatis-plus.mapperPackage}")`
+- 主键 `idType: ASSIGN_ID`（雪花）；逻辑删除 `del_flag`；分页 `PageQuery` + `TableDataInfo`
+- 插件顺序：租户 → 数据权限 → 分页 → 乐观锁；所有业务表带 `tenant_id`
+- BO/VO 映射：MapStruct-Plus `MapstructUtils.convert`
+
+### 安全
+- 认证/授权：**Sa-Token**（`token-name: Authorization`，JWT），权限注解 `@SaCheckPermission("xxx:*")`
+- 接口/响应加密 `api-decrypt`（dev 关闭）；XSS 过滤；验证码（dev 关闭）；登录限流（密码错 5 次锁 10 分钟）
+
+## 5. 前端结构（plus-ui）
 
 ```
-/home/jvkit/workspace/oa/docs/教学/
+src/
+├── main.ts / App.vue / permission.ts   # 入口 + 路由守卫
+├── api/                 # 接口层，按模块分目录（invoice/procurement/system/monitor/tool/workflow...）
+├── components/          # 通用组件（Pagination/DictTag/RightToolbar/FileUpload...）
+├── directive/           # 自定义指令（v-hasPermi 权限指令等）
+├── hooks/  enums/  lang/  plugins/  types/  utils/
+├── layout/              # 整体布局（侧边栏/顶栏/标签页）
+├── router/index.ts      # 静态路由 + 动态路由容器
+├── store/modules/       # Pinia（app/dict/notice/permission/settings/tagsView/user）
+└── views/               # 页面（system/invoice/procurement/workflow/demo/...）
 ```
 
-约定：
+### 路由/菜单机制（后端驱动）
+- 前端只有少量静态路由（`/login`、`/redirect`、404/401 等），业务路由由后端 **`sys_menu` 表**驱动
+- `src/permission.ts` 登录后调 `usePermissionStore().generateRoutes()` → `GET /system/menu/getRouters` 拿菜单树 → `filterAsyncRouter()` 通过 `import.meta.glob` 扫描 `src/views/**/*.vue` 按路径映射组件
+- **约定：后端菜单的 `component` 字段必须与 `src/views/` 下实际文件路径对应**，页面组件必须存在于 views 中
 
-- 每个主题单独一个 Markdown 文件，按序号命名，例如 `01-前端整体结构与代码位置.md`。
-- 已发布的教学文档**不二次修改**。如果用户对某篇内容提出疑惑或需要补充，应**新开一篇文档**继续讲解，而不是改写旧文档。
-- 目前已有的文档：
-  - `01-前端整体结构与代码位置.md`
-  - `02-如何新增一个完整业务模块.md`
-  - `03-后端分层详解：实体-BO-VO-Mapper-Service-Controller.md`
-  - `04-给零基础讲后端分层：Controller、校验、SQL、复制粘贴.md`
-  - `05-后端三层无比喻版：Controller-Service-Mapper-到底是干什么的.md`
-  - `06-权限、角色、用户与多租户概念.md`
-  - `07-如何为公司A搭建一个员工端：前端视角.md`
-  - `08-租户、租户套餐、父子联动是什么意思.md`
-  - `09-实操：创建租户、套餐、角色并分配权限（长三角物理研究示例）.md`
-  - `10-用户导入Excel模板字段合法值说明.md`
-  - `11-用户导入后如何批量分配角色.md`
-  - `12-导入模板优化建议：用角色名称和部门名称代替编号.md`
-  - `13-字典怎么用：从创建到前后端显示.md`
-  - `14-代码生成器到底能干啥、怎么用.md`
-  - `15-系统监控里任务调度中心和Admin监控为什么是空的.md`
-  - `16-AI 员工审批助手设计方案.md`
-  - `17-病假 AI 审批 MVP 设计方案.md`
-- `AGENTS.md` 本身记录项目整体状态和快速参考，不涉及具体教学细节。
+### HTTP 封装（`src/utils/request.ts`）
+- `baseURL = VITE_APP_BASE_API`（dev `/dev-api`），`timeout: 50000`
+- 请求拦截器：加 `Authorization: Bearer <token>`、`clientid` 头；GET 参数序列化；POST/PUT 防重复提交；可选 `isEncrypt` AES+RSA
+- 响应拦截器：统一解包 `res.data`，处理 401/500/警告/成功
+- **定制点**：对 `invoice/info/(extract|ai-review)` 的 500 **静默处理**（AI 服务不可用时不弹错，前端有兜底数据）
 
-## 当前运行状态
+## 6. 自定义业务模块
+
+### 6.1 发票管理（`ruoyi-invoice` + `src/views/invoice/`）
+完整 CRUD + AI 集成示例，是本项目最完整的"从零新增业务模块"范例（教学文档 `02`、`18`）。
+
+后端：`ruoyi-modules/ruoyi-invoice/src/main/java/org/dromara/invoice/`
+- 分层：`controller/ domain/{bo,vo} mapper/ service/{impl}`；业务对象 `InvoiceInfo`（发票信息）、`InvoiceUsageRecord`（使用记录）
+- 表：`invoice_info`、`invoice_usage_record`；接口前缀 `/invoice/info`，权限 `invoice:info:*`
+- Controller 能力：列表/导出/详情/增删改、`@SaCheckPermission`、`@Log`、`@RepeatSubmit`、AI 审核（`/ai-review/{id}`）、AI 字段识别（`/extract`）、查重（`/check-duplicate`）、真伪查验（`/verify/{id}`，mock：财务单号末位奇数=真、偶数=假）
+- `DifyInvoiceReviewService.java`：AI 识别 + 审核核心，见第 7 节
+- SQL 迁移：`src/main/resources/db/migration/V1__add_ai_opinion.sql`（为 `invoice_info` 加 `ai_opinion` TEXT 列）
+
+前端页面（`src/views/invoice/`）：
+- `info/index.vue`：发票信息 CRUD 列表（含 AI 审核意见、真伪状态、财务查询单号列）
+- `employee/index.vue`：**员工端发票上传与 AI 识别**（三步向导：上传 → AI 识别填表 → 确认提交；含演示兜底逻辑）
+- `usage/index.vue`：发票使用记录 CRUD
+
+相关 SQL（`RuoYi-Vue-Plus/script/sql/`）：
+- `invoice_table.sql`：`invoice_info` 建表
+- `invoice_module.sql`：字典（invoice_type/invoice_status）+ 菜单/按钮权限（含员工发票提交菜单 `invoice/employee/index`）
+
+### 6.2 采购管理（`ruoyi-procurement` + `src/views/procurement/`）
+较新、较完整的一整套 PMS 采购模块（**注意与第 6.3 节旧版 workflow 采购并存**）。
+
+后端：`ruoyi-modules/ruoyi-procurement/src/main/java/org/dromara/procurement/`
+- 实体带 `Pms` 前缀：`PmsProject`、`PmsSupplier`、`PmsBomItem`、`PmsProcurementRequest(+Item)`、`PmsPurchaseOrder(+Item)`
+- 表：`pms_project`、`pms_supplier`、`pms_bom_item`、`pms_procurement_request(_item)`、`pms_purchase_order(_item)`
+- Controller 5 个，权限 `procurement:project:*`、`procurement:supplier:*`、`procurement:bom:*`、`procurement:request:*`、`procurement:order:*`
+- Mapper XML：`resources/mapper/procurement/`（BomItem/ProcurementRequest/PurchaseOrder 有自定义 SQL）
+
+前端页面（`src/views/procurement/`）：`request/`（采购申请，提交启动工作流）、`order/`（采购订单）、`project/`、`supplier/`、`bom/`
+
+相关 SQL：`script/sql/procurement_init.sql`、`procurement_order_init.sql`（菜单 12000-12059 + 各表建表 + 流程定义）
+
+### 6.3 工作流采购申请（旧版，`ruoyi-workflow` 内）
+一套更早的采购申请，与第 6.2 节并存（历史演进结果）：
+- 位置：`ruoyi-modules/ruoyi-workflow/src/main/java/org/dromara/workflow/{controller,domain/bo/vo,mapper,service/impl}/ProcurementRequest*`
+- 表：`procurement_request`（注意与 `pms_procurement_request` 不同）；接口前缀 `/workflow/procurement`，权限 `workflow:procurement:*`
+- 特点：仿 `TestLeave`，与 Warm-Flow 集成，有 `submitAndFlowStart` 提交并启动流程
+- SQL：`script/sql/procurement_menu.sql`；前端对应 `views/procurement/request/index.vue`（旧）及 `views/workflow/procurement/index`
+
+## 7. Dify AI 集成（发票）
+
+发票模块通过外部 **Dify** 服务做 AI 识别与审核。核心代码：`RuoYi-Vue-Plus/ruoyi-modules/ruoyi-invoice/.../service/DifyInvoiceReviewService.java`。
+
+- **配置**（`application-dev.yml` 的 `--- # Dify AI配置` 段）：
+  ```yaml
+  dify:
+    api-url: http://172.16.16.110:8090
+    app-id: fc04cb5d-0d6c-42b1-8dfd-7c6755827d2d   # 注：代码里实际未使用 app-id
+    api-key: app-22cb3e89ff524629af078ee3af77ac08
+  ```
+- **调用方式**（Hutool `HttpRequest`，非 Spring RestTemplate）：
+  1. `POST {api-url}/v1/files/upload`（header `Authorization: Bearer {key}`）上传图片，取返回 `id` 作为 `upload_file_id`
+  2. `POST {api-url}/v1/chat-messages`（`response_mode: blocking`，`user: invoice-system`，files 用 `type: image, transfer_method: local_file`），超时 120s
+- **两类方法**：
+  - `extractAndReviewFromImage(MultipartFile)`：上传图片 → 中文提示词要求返回严格 JSON（invoiceCode/invoiceNumber/invoiceType/amount/taxAmount/totalAmount/invoiceDate/sellerName/buyerName/passed/opinion）；解析时兼容 ```json 代码块、snake_case→驼峰归一化
+  - `reviewInvoice(...)`：旧接口兼容；`passed` 判定较粗糙（不含"驳回/不通过/拒绝"即通过）
+- 已知脆弱点：`Could not extract JSON from Dify answer: null` 曾出现，AI 服务不可用时应走前端兜底/默认通过
+- 前端侧无 Dify 字符串，只通过 `src/api/invoice/info/index.ts` 暴露 `POST /invoice/info/extract`、`POST|GET /invoice/info/ai-review/{id}`、`GET /invoice/info/check-duplicate`、`POST /invoice/info/verify/{id}` 等
+
+## 8. 数据库
+
+- MySQL 容器：`mysql`，host 网络，端口 3306
+- 数据库名：`ry-vue`；账号/密码：`root` / `root`
+- Redis：`localhost:6379`，密码 `ruoyi123`（Redisson）
+- 执行 SQL 方式：
+  ```bash
+  docker exec -i mysql mysql -uroot -proot -D ry-vue --default-character-set=utf8mb4 < xxx.sql
+  ```
+  **所有 SQL 脚本须加 `SET NAMES utf8mb4;`**，防止中文双重编码乱码。
+- 已初始化脚本：`ry_vue_5.X.sql`（全量建库）、`ry_job.sql`（SnailJob）、`ry_workflow.sql`（工作流表）
+- 自定义脚本见 6.1/6.2/6.3 节所列
+
+## 9. 当前运行状态
 
 | 服务 | 地址/位置 | 说明 |
 |---|---|---|
-| 前端（nginx 容器） | `http://127.0.0.1:8090/index` | 容器名 `nginx-web`，使用 host 网络；因 80 被系统 nginx/Dify 占用，改为 8090 |
-| 后端 | `http://127.0.0.1:8088` | 端口因 8080 被占改用 8088 |
+| 前端（nginx 容器） | `http://127.0.0.1:8090/index` | 容器名 `nginx-web`，host 网络；因 80 被系统 nginx/Dify 占用改 8090 |
+| 前端（dev server） | `http://127.0.0.1:8081`（日志里出现过 8082） | `pnpm dev` |
+| 后端 | `http://127.0.0.1:8088` | 因 8080 被占改用 8088 |
 | API 文档 | `http://127.0.0.1:8088/swagger-ui/index.html` | SpringDoc/OpenAPI |
-| 发票管理菜单 | `http://127.0.0.1/index` → 发票管理 → 发票信息 | 登录后可见 |
-| 离线 API 文档 | `/home/jvkit/workspace/oa/ruoyi-api-docs.html` | ReDoc 静态页 |
-| 离线 OpenAPI JSON | `/home/jvkit/workspace/oa/ruoyi-api-docs.json` | 可导入 Postman/Apifox |
+| Spring Boot Admin | `http://127.0.0.1:9090` | 经 nginx `/admin/` 反代（可选启动） |
+| SnailJob | `http://127.0.0.1:8800` | 经 nginx `/snail-job/` 反代（可选启动） |
+| 离线 API 文档 | `/home/jvkit/workspace/oa/ruoyi-api-docs.html`（ReDoc）/ `.json` | 可导入 Postman/Apifox |
+| **6x 后端** | `http://127.0.0.1:8091` | 采购模块迁移版（`ruoyi-6x`），库 `ry-vue-6x` |
+| **6x 前端（dev）** | `http://127.0.0.1:8083` | `plus-ui-6x`，`pnpm dev`，代理到 8091 |
 
 默认登录账号：`admin` / `admin123`。
+测试账号（见 `docs/发票AI审核与查重工作汇报.md`）：员工 `test_employee`，管理员 `admina`（租户 `721855`）。
 
-## 启动/停止命令
+## 10. 启动/停止命令
 
 ### 后端
-
 ```bash
 cd /home/jvkit/workspace/oa/RuoYi-Vue-Plus/ruoyi-admin
 nohup java -jar target/ruoyi-admin.jar --server.port=8088 > /tmp/ruoyi-admin.log 2>&1 &
 ```
+- 构建：在 `RuoYi-Vue-Plus/` 下 `mvn package`（默认跳过测试），产物 `ruoyi-admin/target/ruoyi-admin.jar`
+- 停止：找到 `java -jar target/ruoyi-admin.jar --server.port=8088` 进程并 kill
+- VSCode 启动配置：`DromaraApplication`，前置任务 `mvn install -DskipTests`，额外参数 `--sa-token.timeout=31536000`
 
-停止：找到 `java -jar target/ruoyi-admin.jar --server.port=8088` 进程并 kill。
-
-### 前端
-
+### 前端（plus-ui）
 ```bash
 # 开发调试
 cd /home/jvkit/workspace/oa/plus-ui
 pnpm dev
+
+# 生产构建
+pnpm build:prod
 ```
 
-生产部署使用 nginx 容器：
-
+### 生产部署（nginx 容器）
 ```bash
-# 构建
 cd /home/jvkit/workspace/oa/plus-ui
 pnpm build:prod
-
-# 复制到 nginx 静态目录
 sudo rm -rf /docker/nginx/html/*
 sudo cp -r dist/* /docker/nginx/html/
-
-# 启动/重启容器
-docker start nginx-web
-# 或
-docker restart nginx-web
+docker start nginx-web    # 或 docker restart nginx-web
 ```
+nginx 配置：`/docker/nginx/conf/nginx.conf`（listen 8090，`/prod-api/` → `127.0.0.1:8088`，`/admin/` → 9090，`/snail-job/` → 8800；备份 `nginx.conf.bak.*`）。另有备选 `plus-ui/nginx-8088.conf`。
 
-## 端口冲突处理
+## 11. 端口冲突处理
 
 本机 80 端口可能被系统 nginx（OpenWebUI 反代）占用，8080 被 `open-webui-feedback-owu` 占用。
 
-临时停止冲突服务（不删容器）：
-
 ```bash
-sudo systemctl stop nginx          # 系统 nginx，反向代理了 OpenWebUI
+# 临时停止冲突服务（不删容器）
+sudo systemctl stop nginx           # 系统 nginx，反向代理了 OpenWebUI
 docker stop open-webui-feedback-owu # OpenWebUI 容器
-docker start nginx-web             # 启动 RuoYi 前端容器
-```
+docker start nginx-web              # 启动 RuoYi 前端容器
 
-恢复 OpenWebUI：
-
-```bash
+# 恢复 OpenWebUI
 sudo systemctl start nginx
 docker start open-webui-feedback-owu
 ```
 
-## 数据库
+## 12. scripts/ 辅助脚本
 
-- MySQL 容器：`mysql`，host 网络，端口 3306
-- 数据库名：`ry-vue`
-- 账号/密码：`root` / `root`
-- 执行 SQL 方式：`docker exec -i mysql mysql -uroot -proot -D ry-vue --default-character-set=utf8mb4 < xxx.sql`
-  - 所有 SQL 脚本已加入 `SET NAMES utf8mb4;`，防止中文写入时出现双重编码乱码。
+### Dify 配置脚本（在 Dify API 容器内运行，直接操作其 PostgreSQL）
+这些脚本 `sys.path.insert(0, '/app/api')` 并 import Dify 内部模块，需在 Dify API 容器内执行。目标应用：`发票AI审核`。
+- `install_openai_compatible.py`：安装 Dify 市场插件 `langgenius/openai_api_compatible`
+- `add_oai_compat_models.py`：向 OpenAI 兼容 provider 注册模型（endpoint `https://chat.iphy.ac.cn/api/v1`，含硬编码 key，**仅服务器运维用**）
+- `set_dify_model.py` / `configure_dify_app.py`：为 `发票AI审核` 应用设置模型（glm-5.2）与金融发票审核预置提示词
+- `create_dify_app.py` / `create_dify_api_key.py` / `link_app_config.py` / `fix_dify_app_mode.py`：建应用/建 API key/绑定模型配置/改应用模式
+- `list_compat_models.py` / `check_manifest.py` / `check_plugin_task.py` / `uninstall_openai.py`：查询/校验/清理
+- `generate_invoice_images.py`：**纯本地**（用 `.venv-pptx` 里的 Pillow）生成 `test-invoices/bad_invoice.png`、`good_invoice.png`
 
-已初始化的脚本：
-- `ry_vue_5.X.sql`
-- `ry_job.sql`
-- `ry_workflow.sql`
+### scripts/demo-video/（演示视频录制流水线）
+- Node + Playwright，对开发前端录制发票/采购流程演示视频，通过 `page.route` **mock 后端**（不调用真实 AI）
+- `rec_lib.js`（录制库）、`prepare.js`（预热+登录态）、`invoice_rec.js` / `purchase_rec.js`（录制）、`post_*.js`（ffmpeg 裁剪+ASS 字幕）、`verify_fb.js`（冒烟验证）
+- 产物：`invoice.mp4`、`purchase.mp4`
 
-## 已生成的扩展
+## 13. docs/ 文档
 
-### 1. 采购申请后端代码
+### 顶层报告
+- `dify-experience.md`：Dify 部署与发票 AI 集成经验（Dify 1.0.0 @ `172.16.16.110:8090`、OpenAI 兼容插件、模型 glm-5.2/deepseek-v4-pro/qwen3.6、文件上传/JSON 输出经验）
+- `发票AI审核与查重工作汇报.md`（2026-08-04）：发票 AI 审核与查重功能状态报告
+- `RuoYi-6X-升级评估汇报.md`（2026-08-06）：5.6.2 → 6.0.0 升级评估，**结论：暂缓升级**，先在 5.6.2 上完成采购
 
-位于 `ruoyi-modules/ruoyi-workflow`，仿照 `TestLeave` 实现：
+### 教学文档（docs/教学/，01-19）
+按序号命名，已发布文档**不二次修改**，需补充时新开一篇。01-19 覆盖：前端结构、如何新增完整业务模块、后端分层（实体-BO-VO-Mapper-Service-Controller）、权限/角色/用户/多租户、租户套餐、用户导入 Excel、字典、代码生成器、系统监控、AI 审批助手/病假 AI MVP 设计、后端项目结构详解（18）、Java-Maven 跨模块 import（19）等。
 
-- `domain/ProcurementRequest.java`
-- `domain/bo/ProcurementRequestBo.java`
-- `domain/vo/ProcurementRequestVo.java`
-- `mapper/ProcurementRequestMapper.java`
-- `service/IProcurementRequestService.java`
-- `service/impl/ProcurementRequestServiceImpl.java`
-- `controller/ProcurementRequestController.java`
-- `resources/mapper/workflow/ProcurementRequestMapper.xml`
+## 14. 测试策略
 
-数据库表：`procurement_request`。
+- **后端单元/集成测试**：默认 `skipTests=true`，日常 `mvn package` 不跑测试；如需执行去掉该属性或 `mvn test`
+- **前端类型检查**：`vue-tsc`（`tsconfig.json` 中 `baseUrl` 有 TS7 弃用告警，属已知噪音，见 `temp/erro*.md`）
+- **AI 功能**：无自动化测试，靠演示兜底 + 冒烟脚本（`scripts/demo-video/verify_fb.js`）+ 手工验证
+- **演示视频**：`scripts/demo-video/` 用 Playwright 录屏并 mock 后端
+- 发票测试图片在 `test-invoices/`
 
-接口前缀：`/workflow/procurement`，权限标识：`workflow:procurement:*`。
-
-菜单：侧边栏 **采购管理 → 采购申请**。
-
-### 2. 发票管理模块
-
-位于 `ruoyi-modules/ruoyi-invoice`，是一个完整 CRUD 示例：
-
-- `domain/InvoiceInfo.java`
-- `domain/bo/InvoiceInfoBo.java`
-- `domain/vo/InvoiceInfoVo.java`
-- `mapper/InvoiceInfoMapper.java`
-- `service/IInvoiceInfoService.java`
-- `service/impl/InvoiceInfoServiceImpl.java`
-- `controller/InvoiceInfoController.java`
-- `resources/mapper/invoice/InvoiceInfoMapper.xml`
-
-数据库表：`invoice_info`。
-
-字典：`invoice_type`（发票类型）、`invoice_status`（发票状态）。
-
-接口前缀：`/invoice/info`，权限标识：`invoice:info:*`。
-
-菜单：侧边栏 **发票管理 → 发票信息**。
-
-相关 SQL：
-- 建表：`RuoYi-Vue-Plus/script/sql/invoice_table.sql`
-- 字典/菜单/权限：`RuoYi-Vue-Plus/script/sql/invoice_module.sql`
-
-教学文档：`docs/教学/02-如何新增一个完整业务模块.md`。
-
-### 3. 部署配置
-
-- nginx 配置：`/docker/nginx/conf/nginx.conf`（已指向 127.0.0.1:8088）
-- 前端开发代理：`/home/jvkit/workspace/oa/plus-ui/vite.config.ts`（目标 127.0.0.1:8088）
-- 备份配置：`/docker/nginx/conf/nginx.conf.bak.*`
-
-## 常见非致命告警
+## 15. 常见非致命告警
 
 后端日志中可能出现，不影响登录和常规接口：
+1. `UnknownHostException: net` — Spring Boot Admin 客户端注册失败，本机主机名 `net` 解析失败
+2. `SnailJob gRPC 连不上 127.0.0.1:17888` — `ruoyi-snailjob-server` 未启动
+3. `Could not extract JSON from Dify answer: null` — Dify 返回非预期格式，AI 审核可能走兜底
+如需完整监控和定时任务调度，再启动对应模块（monitor-admin / snailjob-server）。
 
-1. `UnknownHostException: net` — Spring Boot Admin 客户端注册失败，本机主机名 `net` 解析失败。
-2. `SnailJob gRPC 连不上 127.0.0.1:17888` — `ruoyi-snailjob-server` 未启动。
+## 16. 约定与注意事项
 
-如需完整监控和定时任务调度，再启动对应模块。
+- 本项目前后端分离，前端路由/菜单由后端 `sys_menu` 表驱动，但**页面组件必须存在于前端 `plus-ui/src/views` 中**，且 `component` 字段与文件路径一一对应
+- 菜单类型：`M` 目录、`C` 菜单、`F` 按钮；外链：目录类型 + `是否外链=是` + 路由地址=http(s)://xxx
+- 工作流基于 **Warm-Flow**，示例 `TestLeave` 是最直接参考
+- 新增 Python 辅助脚本放 `scripts/`；Pillow/pptx 相关用 `.venv-pptx`（`.venv` 是空的）
+- 教学文档放 `docs/教学/` 按序号命名，已发布不二次修改
+- `ruoyi-6x` / `plus-ui-6x` 已迁移采购模块（见 `docs/采购模块6X迁移报告.md`），与 5.6.2 并行；后续采购相关开发优先在 6x 上进行（原 `docs/RuoYi-6X-升级评估汇报.md` 曾评估暂缓，已按老板决定启动 6x 迁移）
 
-## 学习建议路线
+## 17. 学习建议路线
 
 1. 登录与用户/角色/权限管理
 2. 菜单管理、字典、参数、部门、岗位
 3. 工作流模块：流程定义、请假示例、我的任务
 4. 代码生成器：导入表 → 预览 → 生成 zip
-5. 前后端代码结构梳理
-6. 采购/SOP 流程二次开发
-
-## 注意事项
-
-- 本项目采用前后端分离，前端路由/菜单由后端 `sys_menu` 表驱动，但页面组件必须存在于前端 `plus-ui/src/views` 中。
-- 菜单类型：`M` 目录、`C` 菜单、`F` 按钮。
-- 外链配置：菜单类型为目录时，`是否外链=是` + `路由地址=http(s)://xxx` 可实现点击跳转外部站点。
-- 工作流基于 Warm-Flow，示例 `TestLeave` 是最直接的参考。
+5. 前后端代码结构梳理（文档 01/03/05/18/19）
+6. 发票模块（作为完整 CRUD + AI 集成范例，文档 02）
+7. 采购/SOP 流程二次开发

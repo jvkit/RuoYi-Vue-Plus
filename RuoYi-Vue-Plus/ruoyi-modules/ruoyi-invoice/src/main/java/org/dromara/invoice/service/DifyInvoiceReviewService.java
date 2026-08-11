@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -103,8 +104,44 @@ public class DifyInvoiceReviewService {
             queryBuilder.append("\n\n发票图片已提供，请结合图片内容进行审核。");
         }
 
-        String response = callDifyChat(queryBuilder.toString(), null);
+        // 真正把图片上传到 Dify 并随请求发送（此前只追加了文字提示，图片从未被发送）
+        String uploadFileId = null;
+        if (imageBase64 != null && !imageBase64.isEmpty()) {
+            try {
+                byte[] bytes = Base64.getDecoder().decode(imageBase64);
+                uploadFileId = uploadImageToDifyBytes(bytes);
+                if (uploadFileId == null) {
+                    log.warn("Failed to upload review image to Dify, will review by text fields only");
+                }
+            } catch (Exception e) {
+                log.warn("Failed to decode/upload review image", e);
+            }
+        }
+
+        String response = callDifyChat(queryBuilder.toString(), uploadFileId);
         return parseReviewResponse(response);
+    }
+
+    /**
+     * 上传字节数组图片到Dify获取upload_file_id
+     */
+    private String uploadImageToDifyBytes(byte[] bytes) {
+        try {
+            String url = difyApiUrl + "/v1/files/upload";
+            HttpResponse response = HttpRequest.post(url)
+                    .header("Authorization", "Bearer " + difyApiKey)
+                    .form("file", bytes, "invoice_review.png")
+                    .form("user", "invoice-system")
+                    .timeout(60000)
+                    .execute();
+            String body = response.body();
+            log.debug("Dify upload bytes response: {}", body);
+            var json = JSONUtil.parseObj(body);
+            return json.getStr("id");
+        } catch (Exception e) {
+            log.error("Failed to upload image bytes to Dify", e);
+            return null;
+        }
     }
 
     /**
@@ -174,6 +211,16 @@ public class DifyInvoiceReviewService {
             var json = JSONUtil.parseObj(response);
             String answer = json.getStr("answer");
 
+            // Dify 返回错误时透出真实错误信息，便于定位（如模型不支持视觉/多模态）
+            if (answer == null || answer.isEmpty()) {
+                String errorMsg = extractDifyError(response);
+                if (errorMsg != null) {
+                    log.warn("Dify returned error while extracting invoice: {}", errorMsg);
+                    return ExtractResult.error("AI识别失败：" + errorMsg);
+                }
+                return ExtractResult.error("AI返回格式异常，未能识别发票");
+            }
+
             // 尝试从answer中提取JSON
             String jsonStr = extractJsonFromAnswer(answer);
             if (jsonStr == null) {
@@ -238,6 +285,19 @@ public class DifyInvoiceReviewService {
             var json = JSONUtil.parseObj(response);
             String answer = json.getStr("answer");
 
+            // Dify 返回错误时透出真实错误信息
+            if (answer == null || answer.isEmpty()) {
+                String errorMsg = extractDifyError(response);
+                if (errorMsg != null) {
+                    log.warn("Dify returned error while reviewing invoice: {}", errorMsg);
+                    ReviewResult r = new ReviewResult();
+                    r.setPassed(false);
+                    r.setOpinion("AI审核失败：" + errorMsg);
+                    r.setRawAnswer(response);
+                    return r;
+                }
+            }
+
             ReviewResult result = new ReviewResult();
             result.setRawAnswer(answer);
             result.setPassed(!answer.contains("驳回") && !answer.contains("不通过") && !answer.contains("拒绝"));
@@ -246,6 +306,28 @@ public class DifyInvoiceReviewService {
         } catch (Exception e) {
             log.error("Failed to parse Dify response: {}", response, e);
             return ReviewResult.defaultPass();
+        }
+    }
+
+    /**
+     * 从Dify响应中提取错误信息（message / error.message 等字段）
+     */
+    private String extractDifyError(String response) {
+        if (response == null || response.isEmpty()) {
+            return null;
+        }
+        try {
+            var json = JSONUtil.parseObj(response);
+            String message = json.getStr("message");
+            if (message == null || message.isEmpty()) {
+                var error = json.getJSONObject("error");
+                if (error != null) {
+                    message = error.getStr("message");
+                }
+            }
+            return message;
+        } catch (Exception e) {
+            return null;
         }
     }
 

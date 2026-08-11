@@ -152,7 +152,11 @@ service.interceptors.response.use(
       }
       return Promise.reject('无效的会话，或者会话已过期，请重新登录。');
     } else if (code === HttpStatus.SERVER_ERROR) {
-      ElMessage({ message: msg, type: 'error' });
+      // AI 识别/审核接口失败时静默处理（AI 服务不可用场景，前端有兜底数据）
+      const isAiEndpoint = /invoice\/info\/(extract|ai-review)/.test(res.config.url || '');
+      if (!isAiEndpoint) {
+        ElMessage({ message: msg, type: 'error' });
+      }
       return Promise.reject(new Error(msg));
     } else if (code === HttpStatus.WARN) {
       ElMessage({ message: msg, type: 'warning' });

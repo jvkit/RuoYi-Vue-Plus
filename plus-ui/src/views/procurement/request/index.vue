@@ -75,7 +75,7 @@
         <el-table-column label="供应商" align="center" prop="supplierName" :show-overflow-tooltip="true" />
         <el-table-column label="总金额" align="center" prop="amount" width="120">
           <template #default="scope">
-            <span>{{ scope.row.amount?.toFixed(2) }}</span>
+            <span>{{ (Number(scope.row.amount) || 0).toFixed(2) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="采购类型" align="center" prop="purchaseType" width="100">
