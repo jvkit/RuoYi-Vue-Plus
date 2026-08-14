@@ -116,6 +116,8 @@ src/
 ### 6.1 发票管理（`ruoyi-invoice` + `src/views/invoice/`）
 完整 CRUD + AI 集成示例，是本项目最完整的"从零新增业务模块"范例（教学文档 `02`、`18`）。
 
+> **已迁移到 6x**（2026-08-13）：后端 `ruoyi-6x/ruoyi-modules/ruoyi-invoice` + 前端 `plus-ui-6x/src/views/invoice`（info/employee/usage）+ `src/api/invoice`；SQL 固化脚本 `ruoyi-6x/script/sql/invoice_6x.sql`（幂等：建表去租户 + 字典 1805/1806 段 + 菜单 1804xxx）。适配点：去 `ruoyi-common-tenant`、`@RepeatSubmit` 改 `ruoyi-common-redis`、`@TableLogic delFlag`、Excel 注解改 Fesod、`TableDataInfo`→`PageResult`、`request.ts` 已移植 AI 端点 500 静默。本段以下描述为 5.6.2 生产版。
+
 后端：`ruoyi-modules/ruoyi-invoice/src/main/java/org/dromara/invoice/`
 - 分层：`controller/ domain/{bo,vo} mapper/ service/{impl}`；业务对象 `InvoiceInfo`（发票信息）、`InvoiceUsageRecord`（使用记录）
 - 表：`invoice_info`、`invoice_usage_record`；接口前缀 `/invoice/info`，权限 `invoice:info:*`
@@ -298,6 +300,9 @@ docker start open-webui-feedback-owu
 - 新增 Python 辅助脚本放 `scripts/`；Pillow/pptx 相关用 `.venv-pptx`（`.venv` 是空的）
 - 教学文档放 `docs/教学/` 按序号命名，已发布不二次修改
 - `ruoyi-6x` / `plus-ui-6x` 已迁移采购模块（见 `docs/采购模块6X迁移报告.md`），与 5.6.2 并行；后续采购相关开发优先在 6x 上进行（原 `docs/RuoYi-6X-升级评估汇报.md` 曾评估暂缓，已按老板决定启动 6x 迁移）
+- **SQL 一律固化为脚本**：任何数据库改动（建表、加列、字典、菜单、角色等）都必须写入 `script/sql/` 下的脚本，并保持**幂等可重复执行**（加列用 `information_schema` 判断是否已存在、增删类先删后插、更新用 `UPDATE`），禁止只在库里手工改而不留脚本，否则换环境/上生产无法复现
+- 6x 采购 SQL 脚本：`ruoyi-6x/script/sql/procurement_6x.sql`（基线：建表 + 菜单 + 字典 + 流程定义）；`procurement_6x_increment.sql`（增量，幂等：`pms_procurement_request` 加 `title_type/title_name` 列、采购类型字典改为材料优先、采购菜单图标纠正为 `ep:` 前缀、新增「采购专员」角色）
+- 6x 发票 SQL 脚本：`ruoyi-6x/script/sql/invoice_6x.sql`（幂等：发票两表建表去租户、字典 invoice_type/invoice_status、菜单 1804xxx 含发票信息/发票提交/发票使用记录）
 
 ## 17. 学习建议路线
 
