@@ -4,6 +4,21 @@
 
 ---
 
+## 0. 部署前必读（维护约定）
+
+1. **本指南是服务器部署的唯一依据**。每次部署前必须通读当前版本，确认配置项与本次改动匹配。
+2. **所有数据库改动必须固化为 SQL 脚本**，放在 `ruoyi-6x/script/sql/`，并保持幂等。禁止直接在生产/服务器库手工改数据。
+3. **本地与服务器数据库同步方式**：
+   - 日常增量：通过 `apply-sql.sh` 应用同一份脚本。
+   - 首次基线或重大重构：可整库 dump/restore，但之后必须重置 `applied-sql.log` 并回归增量脚本管理。
+4. **前端生产配置三件套必须与服务器路径对齐**：
+   - `VITE_APP_CONTEXT_PATH = '/oa/'`
+   - `VITE_APP_BASE_API = '/oa/prod-api'`
+   - `VITE_APP_ENCRYPT = false`
+5. **部署后必须验证**：首页 200、登录成功、至少一个列表页加载出数据。
+
+---
+
 ## 一、总体架构
 
 | 组件 | 位置 | 端口/路径 | 说明 |
@@ -13,8 +28,8 @@
 | nginx 配置 | `/etc/nginx/sites-available/default` | 80 → `/oa/` | 手动维护 |
 | 源码 | `/home/liyang/jvkit/oa-workspace/` | — | `ruoyi-6x` + `plus-ui-6x` |
 | 运行目录 | `/home/liyang/jvkit/oa/` | — | dist、jar、logs |
-| MySQL | docker 容器 `mysql` | `127.0.0.1:3306/ry-vue-6x` | 与本地开发库同名 |
-| Redis | docker 容器 `redis` | `127.0.0.1:6379` | 密码 `ruoyi123` |
+| MySQL | docker 容器 `ruoyi-mysql` | `127.0.0.1:3306/ry-vue-6x` | 与本地开发库同名 |
+| Redis | docker 容器 `ruoyi-redis` | `127.0.0.1:6379` | 密码 `ruoyi123` |
 
 ---
 
@@ -158,14 +173,23 @@ bash /home/liyang/jvkit/oa-workspace/ruoyi-6x/script/sql/apply-sql.sh
 
 ## 八、踩坑与注意事项
 
-### 8.1 前端 base 路径必须设置为 `/oa/`
+### 8.1 前端 base 路径与 API 路径
 
 生产构建时，Vite 的 `base` 决定资源引用路径。
 
 - 文件：`plus-ui-6x/.env.production`
-- 必须设置：`VITE_APP_CONTEXT_PATH = '/oa/'`
+- 必须设置：
+  - `VITE_APP_CONTEXT_PATH = '/oa/'`
+  - `VITE_APP_BASE_API = '/oa/prod-api'`（与子路径一致的绝对路径）
+  - `VITE_APP_ENCRYPT = false`（与后端 `api-decrypt.enabled=false` 保持一致）
 
-**坑**：如果保持默认 `/`，部署到 `/oa/` 子目录后，浏览器加载 `/assets/xxx.js` 会 404，页面白屏。
+**坑 1**：如果 `VITE_APP_CONTEXT_PATH` 保持默认 `/`，部署到 `/oa/` 子目录后，浏览器加载 `/assets/xxx.js` 会 404，页面白屏。
+
+**坑 2**：如果 `VITE_APP_BASE_API = '/prod-api'`（绝对路径），前端会请求 `http://172.16.16.110/prod-api/xxx`，而 nginx 只代理了 `/oa/prod-api/`，导致所有 API 404，登录失败。
+
+**坑 3**：如果 `VITE_APP_BASE_API = 'prod-api'`（相对路径），在 `/procurement/request` 页面会变成 `/procurement/prod-api/xxx`，列表接口 401/404，页面一直 loading。
+
+**坑 4**：如果 `VITE_APP_ENCRYPT = true` 但后端 `api-decrypt.enabled = false`，登录接口 500，提示"发生未知异常"。
 
 ### 8.2 `/var/www/oa/` 的权限
 
