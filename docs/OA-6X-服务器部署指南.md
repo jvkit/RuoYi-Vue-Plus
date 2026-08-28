@@ -23,7 +23,7 @@
 
 | 组件 | 位置 | 端口/路径 | 说明 |
 |---|---|---|---|
-| 前端静态资源 | `/var/www/oa/` | `http://172.16.16.110/oa/` | nginx 直接服务 |
+| 前端静态资源 | `/home/liyang/jvkit/oa/dist/` | `http://172.16.16.110/oa/` | nginx 直接服务 |
 | 后端 jar | `/home/liyang/jvkit/oa/backend/ruoyi-admin.jar` | `127.0.0.1:8092` | Java 进程 |
 | nginx 配置 | `/etc/nginx/sites-available/default` | 80 → `/oa/` | 手动维护 |
 | 源码 | `/home/liyang/jvkit/oa-workspace/` | — | `ruoyi-6x` + `plus-ui-6x` |
@@ -51,7 +51,7 @@
         └── applied-sql.log  # 已执行 SQL 记录
 ```
 
-**原则**：源码与运行目录分离，部署时从 workspace 构建并复制到 oa。
+**原则**：源码与运行目录分离，部署时从 workspace 构建并复制到 oa。nginx 直接读取 `oa/dist/`，不再额外同步到 `/var/www/oa/`。
 
 ---
 
@@ -82,7 +82,13 @@ cd /home/liyang/jvkit/oa-workspace/ruoyi-6x
 bash deploy.sh
 ```
 
-脚本会完成：git pull → 后端构建 → 前端构建 → SQL 增量 → 替换 jar/dist → 重启后端。
+脚本会完成：git pull → 后端构建 → 前端构建 → SQL 增量 → 替换 jar/dist → 设置权限 → 重启后端。
+
+**时间参考**（服务器已有 node_modules / Maven 依赖缓存）：
+- 后端构建：约 30~90 秒（仅变更模块重新编译时更快）
+- 前端构建：约 10~20 秒
+- 后端启动：约 15~25 秒
+- 全链路（pull → build → deploy → ready）：约 2~4 分钟
 
 ### 手动启动后端
 
@@ -158,13 +164,13 @@ bash /home/liyang/jvkit/oa-workspace/ruoyi-6x/script/sql/apply-sql.sh
 关键步骤：
 
 1. `git pull` 前后端代码。
-2. `mvn package -DskipTests -pl ruoyi-admin -am` 构建后端。
-3. `pnpm install` + `pnpm build:prod` 构建前端。
+2. `./mvnw package -DskipTests -pl ruoyi-admin -am` 构建后端（服务器无系统 `mvn`，使用 wrapper）。
+3. `corepack pnpm install` + `corepack pnpm build:prod` 构建前端（服务器无全局 `pnpm`，用 corepack 调用）。
 4. `apply-sql.sh` 执行 SQL 增量。
 5. 停止旧后端进程。
 6. 复制 jar 到 `~/jvkit/oa/backend/`。
 7. 复制 dist 到 `~/jvkit/oa/dist/`。
-8. **同步 dist 到 `/var/www/oa/`**（nginx 实际服务目录）。
+8. 设置 `oa/dist/` 及上层目录权限为 `755`，确保 nginx worker（`www-data`）可读。
 9. 启动后端。
 10. 尝试 `nginx -s reload`（见第八节）。
 11. 冒烟验证。
@@ -191,19 +197,17 @@ bash /home/liyang/jvkit/oa-workspace/ruoyi-6x/script/sql/apply-sql.sh
 
 **坑 4**：如果 `VITE_APP_ENCRYPT = true` 但后端 `api-decrypt.enabled = false`，登录接口 500，提示"发生未知异常"。
 
-### 8.2 `/var/www/oa/` 的权限
+### 8.2 `/home/liyang/jvkit/oa/dist/` 的权限
 
-nginx worker 以 `www-data` 运行，需要能读取 `/var/www/oa/` 中的文件。
+nginx worker 以 `www-data` 运行，必须能逐级进入 `/home/liyang/jvkit/oa/dist/` 并读取文件。
 
-- `/var/www/` 目录本身属主是 `root:root`，部署脚本**不能**删除 `/var/www/oa/` 这个目录本身。
-- 当前方案：只清空目录内的内容，再复制新文件。
-- `/var/www/oa/` 已改为 `liyang:liyang` 所有，确保脚本可无 sudo 写入。
-
-如果需要重建权限：
+- `liyang` 用户家目录默认权限可能是 `750`，会导致 nginx 500：`stat() "/home/liyang/jvkit/oa/dist/index.html" failed (13: Permission denied)`。
+- `deploy.sh` 已自动设置：`chmod 755 "$HOME" "$HOME/jvkit" "$OA_DEPLOY" "$OA_DEPLOY/dist"` 和 `chmod -R 755 "$OA_DEPLOY/dist"`。
+- 如果手动复制 dist 后遇到 500，执行：
 
 ```bash
-sudo chown -R liyang:liyang /var/www/oa
-sudo chmod -R 755 /var/www/oa
+sudo chmod 755 /home/liyang /home/liyang/jvkit /home/liyang/jvkit/oa /home/liyang/jvkit/oa/dist
+sudo chmod -R 755 /home/liyang/jvkit/oa/dist
 ```
 
 ### 8.3 nginx reload 需要 sudo
