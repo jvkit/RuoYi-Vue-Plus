@@ -32,15 +32,15 @@ git pull origin "$(git branch --show-current)"
 # ---------- 2. 构建后端 ----------
 log "构建后端 jar..."
 cd "$OA_WORKSPACE/ruoyi-6x"
-mvn package -DskipTests -pl ruoyi-admin -am -q || die "后端构建失败"
+./mvnw package -DskipTests -pl ruoyi-admin -am -q || die "后端构建失败"
 
 # ---------- 3. 构建前端 ----------
 log "安装前端依赖..."
 cd "$OA_WORKSPACE/plus-ui-6x"
-pnpm install --frozen-lockfile || die "前端依赖安装失败"
+corepack pnpm install --frozen-lockfile || die "前端依赖安装失败"
 
 log "构建前端静态文件..."
-pnpm build:prod || die "前端构建失败"
+corepack pnpm build:prod || die "前端构建失败"
 
 # ---------- 4. 执行 SQL 增量脚本 ----------
 log "执行 SQL 增量脚本..."
@@ -65,13 +65,10 @@ log "替换前端 dist..."
 rm -rf "$OA_DEPLOY/dist"
 cp -r "$OA_WORKSPACE/plus-ui-6x/dist" "$OA_DEPLOY/dist"
 
-# 同时同步到 nginx 实际服务目录（兼容 /etc/nginx/sites-available/default 中的 /oa/ 配置）
-NGINX_OA_ROOT="/var/www/oa"
-if [ -d "$(dirname "$NGINX_OA_ROOT")" ]; then
-  log "同步 dist 到 nginx 根目录 $NGINX_OA_ROOT..."
-  find "$NGINX_OA_ROOT" -mindepth 1 -delete 2>/dev/null || true
-  cp -r "$OA_DEPLOY/dist/"* "$NGINX_OA_ROOT/" || warn "同步到 $NGINX_OA_ROOT 失败，请检查权限"
-fi
+# nginx worker 以 www-data 运行，必须确保能读取 dist 及上层目录
+log "设置 dist 权限..."
+chmod 755 "$HOME" "$HOME/jvkit" "$OA_DEPLOY" "$OA_DEPLOY/dist"
+chmod -R 755 "$OA_DEPLOY/dist"
 
 # ---------- 7. 启动后端 ----------
 log "启动后端（端口 $BACKEND_PORT）..."
