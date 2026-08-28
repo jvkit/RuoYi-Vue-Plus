@@ -65,6 +65,14 @@ log "替换前端 dist..."
 rm -rf "$OA_DEPLOY/dist"
 cp -r "$OA_WORKSPACE/plus-ui-6x/dist" "$OA_DEPLOY/dist"
 
+# 同时同步到 nginx 实际服务目录（兼容 /etc/nginx/sites-available/default 中的 /oa/ 配置）
+NGINX_OA_ROOT="/var/www/oa"
+if [ -d "$(dirname "$NGINX_OA_ROOT")" ]; then
+  log "同步 dist 到 nginx 根目录 $NGINX_OA_ROOT..."
+  sudo rm -rf "$NGINX_OA_ROOT" && sudo mkdir -p "$NGINX_OA_ROOT" && sudo cp -r "$OA_DEPLOY/dist/"* "$NGINX_OA_ROOT/" || warn "同步到 $NGINX_OA_ROOT 失败，请检查权限"
+  sudo chown -R www-data:www-data "$NGINX_OA_ROOT" 2>/dev/null || true
+fi
+
 # ---------- 7. 启动后端 ----------
 log "启动后端（端口 $BACKEND_PORT）..."
 mkdir -p "$(dirname "$BACKEND_LOG")"
@@ -91,8 +99,14 @@ for i in $(seq 1 60); do
 done
 
 # ---------- 8. 重载 nginx ----------
-log "重载 nginx..."
-sudo nginx -t && sudo nginx -s reload || warn "nginx 重载失败，请手动检查"
+# 仅当 nginx 配置实际变化或首次部署时才需要 reload；
+# liyang 用户默认没有 passwordless sudo，因此这里先尝试，失败则给出提示。
+log "尝试重载 nginx..."
+if sudo nginx -t >/dev/null 2>&1 && sudo nginx -s reload >/dev/null 2>&1; then
+  log "nginx 已重载"
+else
+  warn "nginx 重载失败（可能是没有 sudo 权限）。若修改了 nginx 配置，请手动执行：sudo nginx -s reload"
+fi
 
 # ---------- 9. 冒烟验证 ----------
 log "冒烟验证..."
