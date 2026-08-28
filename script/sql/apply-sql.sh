@@ -21,13 +21,17 @@ die()  { echo -e "\033[1;31m[error]\033[0m $*"; exit 1; }
 mkdir -p "$(dirname "$APPLIED_LOG")"
 touch "$APPLIED_LOG"
 
-# 检查 mysql 客户端
-if ! command -v mysql &>/dev/null; then
-  die "未找到 mysql 客户端，请先安装"
+# 如果宿主机没有 mysql 客户端，尝试用 docker exec 调用容器内的 mysql
+if command -v mysql &>/dev/null; then
+  MYSQL_CMD=(mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASS")
+elif docker exec ruoyi-mysql mysql -u"$DB_USER" -p"$DB_PASS" -e "SELECT 1" "$DB_NAME" &>/dev/null; then
+  MYSQL_CMD=(docker exec -i ruoyi-mysql mysql -u"$DB_USER" -p"$DB_PASS")
+else
+  die "未找到 mysql 客户端，且无法通过 docker exec ruoyi-mysql 连接"
 fi
 
 # 测试连接
-if ! mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASS" -e "SELECT 1" "$DB_NAME" &>/dev/null; then
+if ! "${MYSQL_CMD[@]}" -e "SELECT 1" "$DB_NAME" &>/dev/null; then
   die "无法连接 MySQL: $DB_HOST:$DB_PORT/$DB_NAME"
 fi
 
@@ -46,7 +50,7 @@ for sql_file in "$SCRIPT_DIR"/*.sql; do
   fi
 
   log "执行: $filename"
-  if mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASS" --default-character-set=utf8mb4 "$DB_NAME" < "$sql_file"; then
+  if "${MYSQL_CMD[@]}" --default-character-set=utf8mb4 "$DB_NAME" < "$sql_file"; then
     echo "$filename" >> "$APPLIED_LOG"
     ((RUN_COUNT++))
     log "完成: $filename"
