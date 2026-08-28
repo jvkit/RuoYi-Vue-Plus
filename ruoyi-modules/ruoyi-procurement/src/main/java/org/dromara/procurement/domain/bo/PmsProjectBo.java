@@ -42,9 +42,8 @@ public class PmsProjectBo extends BaseEntity {
     private Long parentId;
 
     /**
-     * 项目编码
+     * 项目编码（为空时自动生成：purp-yyyyMMdd-NNN）
      */
-    @NotBlank(message = "项目编码不能为空", groups = {AddGroup.class, EditGroup.class})
     private String projectCode;
 
     /**
@@ -56,13 +55,17 @@ public class PmsProjectBo extends BaseEntity {
     /**
      * 归属部门ID
      */
-    @NotNull(message = "归属部门不能为空", groups = {AddGroup.class, EditGroup.class})
     private Long deptId;
 
     /**
      * 项目负责人
      */
     private String leader;
+
+    /**
+     * 项目负责人用户ID
+     */
+    private Long leaderId;
 
     /**
      * 项目预算

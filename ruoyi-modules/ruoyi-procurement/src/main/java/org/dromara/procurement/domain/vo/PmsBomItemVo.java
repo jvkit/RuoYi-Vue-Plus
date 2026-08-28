@@ -9,7 +9,7 @@ import org.dromara.procurement.domain.PmsBomItem;
 import java.io.Serial;
 import java.io.Serializable;
 import java.math.BigDecimal;
-import java.util.Date;
+import java.time.LocalDateTime;
 
 /**
  * 采购管理-BOM/物料清单视图对象 pms_bom_item
@@ -118,12 +118,12 @@ public class PmsBomItemVo implements Serializable {
      * 创建时间
      */
     @ExcelProperty(value = "创建时间")
-    private Date createTime;
+    private LocalDateTime createTime;
 
     /**
      * 更新时间
      */
     @ExcelProperty(value = "更新时间")
-    private Date updateTime;
+    private LocalDateTime updateTime;
 
 }

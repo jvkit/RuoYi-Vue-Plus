@@ -9,7 +9,7 @@ import org.dromara.procurement.domain.PmsPurchaseOrderItem;
 import java.io.Serial;
 import java.io.Serializable;
 import java.math.BigDecimal;
-import java.util.Date;
+import java.time.LocalDateTime;
 
 /**
  * 采购管理-采购订单明细视图对象 pms_purchase_order_item
@@ -100,12 +100,12 @@ public class PmsPurchaseOrderItemVo implements Serializable {
      * 创建时间
      */
     @ExcelProperty(value = "创建时间")
-    private Date createTime;
+    private LocalDateTime createTime;
 
     /**
      * 更新时间
      */
     @ExcelProperty(value = "更新时间")
-    private Date updateTime;
+    private LocalDateTime updateTime;
 
 }

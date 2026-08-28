@@ -110,6 +110,12 @@
             <artifactId>ruoyi-procurement</artifactId>
         </dependency>
 
+        <!--  发票管理模块  -->
+        <dependency>
+            <groupId>org.dromara</groupId>
+            <artifactId>ruoyi-invoice</artifactId>
+        </dependency>
+
         <!-- Spring Boot Admin 客户端 -->
         <dependency>
             <groupId>de.codecentric</groupId>

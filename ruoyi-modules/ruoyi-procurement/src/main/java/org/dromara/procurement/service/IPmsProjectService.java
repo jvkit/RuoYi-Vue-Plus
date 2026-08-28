@@ -32,6 +32,11 @@ public interface IPmsProjectService {
     List<PmsProjectVo> queryList(PmsProjectBo bo);
 
     /**
+     * 查询项目树形列表（全部正常项目，按 parentId 组装树）
+     */
+    List<PmsProjectVo> queryTreeList();
+
+    /**
      * 新增项目
      */
     Boolean insertByBo(PmsProjectBo bo);

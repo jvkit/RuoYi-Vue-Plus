@@ -8,7 +8,7 @@ import org.dromara.procurement.domain.PmsSupplier;
 
 import java.io.Serial;
 import java.io.Serializable;
-import java.util.Date;
+import java.time.LocalDateTime;
 
 /**
  * 采购管理-供应商视图对象 pms_supplier
@@ -97,12 +97,12 @@ public class PmsSupplierVo implements Serializable {
      * 创建时间
      */
     @ExcelProperty(value = "创建时间")
-    private Date createTime;
+    private LocalDateTime createTime;
 
     /**
      * 更新时间
      */
     @ExcelProperty(value = "更新时间")
-    private Date updateTime;
+    private LocalDateTime updateTime;
 
 }

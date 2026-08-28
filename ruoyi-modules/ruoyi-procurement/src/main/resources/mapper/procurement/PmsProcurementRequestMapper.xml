@@ -8,10 +8,16 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <id property="id" column="id"/>
         <result property="requestCode" column="request_code"/>
         <result property="title" column="title"/>
+        <result property="titleType" column="title_type"/>
+        <result property="titleName" column="title_name"/>
         <result property="projectId" column="project_id"/>
         <result property="projectName" column="project_name"/>
-        <result property="supplierId" column="supplier_id"/>
-        <result property="supplierName" column="supplier_name"/>
+        <result property="leader" column="leader"/>
+        <result property="procurementContact" column="procurement_contact"/>
+        <result property="paymentScreenshot" column="payment_screenshot"/>
+        <result property="quotationUrl" column="quotation_url"/>
+        <result property="invoiceInfoJson" column="invoice_info_json"/>
+        <result property="remainingBudget" column="remaining_budget"/>
         <result property="amount" column="amount"/>
         <result property="purchaseType" column="purchase_type"/>
         <result property="applyReason" column="apply_reason"/>
@@ -26,10 +32,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         SELECT
             r.*,
             p.project_name,
-            s.supplier_name
+            p.leader AS leader,
+            (p.budget - COALESCE(p.used_amount, 0)) AS remaining_budget
         FROM pms_procurement_request r
         LEFT JOIN pms_project p ON r.project_id = p.id AND p.del_flag = '0'
-        LEFT JOIN pms_supplier s ON r.supplier_id = s.id AND s.del_flag = '0'
         <where>
             AND r.del_flag = '0'
             <if test="bo.requestCode != null and bo.requestCode != ''">
@@ -41,19 +47,33 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="bo.projectId != null">
                 AND r.project_id = #{bo.projectId}
             </if>
-            <if test="bo.supplierId != null">
-                AND r.supplier_id = #{bo.supplierId}
-            </if>
             <if test="bo.status != null and bo.status != ''">
                 AND r.status = #{bo.status}
             </if>
             <if test="bo.purchaseType != null and bo.purchaseType != ''">
                 AND r.purchase_type = #{bo.purchaseType}
             </if>
+            <if test="bo.titleType != null and bo.titleType != ''">
+                AND r.title_type = #{bo.titleType}
+            </if>
             <if test="bo.params.beginCreateTime != null and bo.params.endCreateTime != null">
                 AND r.create_time BETWEEN #{bo.params.beginCreateTime} AND #{bo.params.endCreateTime}
             </if>
         </where>
+        ORDER BY r.create_time DESC
+    </select>
+
+    <select id="selectAcceptableList" resultMap="PmsProcurementRequestResult">
+        SELECT
+            r.*,
+            p.project_name,
+            p.leader AS leader,
+            (p.budget - COALESCE(p.used_amount, 0)) AS remaining_budget
+        FROM pms_procurement_request r
+        LEFT JOIN pms_project p ON r.project_id = p.id AND p.del_flag = '0'
+        WHERE r.del_flag = '0'
+          AND r.status = 'finish'
+          AND (r.acceptance_status IS NULL OR r.acceptance_status = 'none')
         ORDER BY r.create_time DESC
     </select>
 

@@ -57,7 +57,8 @@ public interface FlwTaskMapper extends BaseMapperPlus<FlowTask, FlowTaskVo>, MPJ
             .inIfNotEmpty("d", FlowDefinition::getCategory, categoryIds)
             .betweenParams("t", FlowTask::getCreateTime, params, "beginTime", "endTime")
             .eqIfText("uu", FlowUser::getProcessedBy, userId)
-            .eq(userId != null && !userId.isBlank(), "i", FlowInstance::getFlowStatus, BusinessStatusEnum.WAITING.getStatus())
+            .in(userId != null && !userId.isBlank(), "i", FlowInstance::getFlowStatus,
+                List.of(BusinessStatusEnum.WAITING.getStatus(), BusinessStatusEnum.BACK.getStatus()))
             .orderByDesc("t", FlowTask::getCreateTime)
             .orderByDesc("t", FlowTask::getUpdateTime)
             .page(page, FlowTaskVo.class);

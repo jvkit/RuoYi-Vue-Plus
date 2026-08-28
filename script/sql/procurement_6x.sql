@@ -210,19 +210,19 @@ SET @admin_id := 1761100000000000001;
 INSERT INTO sys_menu (menu_id, menu_name, parent_id, order_num, path, component, query_param, is_frame, is_cache, menu_type, visible, status, perms, icon, active_menu, ext, create_dept, create_by, create_time, update_by, update_time, remark)
 VALUES (1801000, '采购管理', 0, 8, 'procurement', NULL, NULL, 'N', 'Y', 'M', '0', '0', NULL, 'shopping-cart', NULL, NULL, NULL, @admin_id, sysdate(), NULL, NULL, '采购管理目录');
 
--- 采购项目
+-- 项目管理
 INSERT INTO sys_menu (menu_id, menu_name, parent_id, order_num, path, component, query_param, is_frame, is_cache, menu_type, visible, status, perms, icon, active_menu, ext, create_dept, create_by, create_time, update_by, update_time, remark)
-VALUES (1801010, '采购项目', 1801000, 1, 'project', 'procurement/project/index', NULL, 'N', 'Y', 'C', '0', '0', 'procurement:project:list', 'office-building', NULL, NULL, NULL, @admin_id, sysdate(), NULL, NULL, '采购项目菜单');
+VALUES (1801010, '项目管理', 1801000, 1, 'project', 'procurement/project/index', NULL, 'N', 'Y', 'C', '0', '0', 'procurement:project:list', 'office-building', NULL, NULL, NULL, @admin_id, sysdate(), NULL, NULL, '采购项目菜单');
 INSERT INTO sys_menu (menu_id, menu_name, parent_id, order_num, path, component, query_param, is_frame, is_cache, menu_type, visible, status, perms, icon, active_menu, ext, create_dept, create_by, create_time, update_by, update_time, remark)
-VALUES (1801011, '采购项目查询', 1801010, 1, '#', NULL, NULL, 'N', 'Y', 'F', '0', '0', 'procurement:project:query', '#', NULL, NULL, NULL, @admin_id, sysdate(), NULL, NULL, '');
+VALUES (1801011, '项目管理查询', 1801010, 1, '#', NULL, NULL, 'N', 'Y', 'F', '0', '0', 'procurement:project:query', '#', NULL, NULL, NULL, @admin_id, sysdate(), NULL, NULL, '');
 INSERT INTO sys_menu (menu_id, menu_name, parent_id, order_num, path, component, query_param, is_frame, is_cache, menu_type, visible, status, perms, icon, active_menu, ext, create_dept, create_by, create_time, update_by, update_time, remark)
-VALUES (1801012, '采购项目新增', 1801010, 2, '#', NULL, NULL, 'N', 'Y', 'F', '0', '0', 'procurement:project:add', '#', NULL, NULL, NULL, @admin_id, sysdate(), NULL, NULL, '');
+VALUES (1801012, '项目管理新增', 1801010, 2, '#', NULL, NULL, 'N', 'Y', 'F', '0', '0', 'procurement:project:add', '#', NULL, NULL, NULL, @admin_id, sysdate(), NULL, NULL, '');
 INSERT INTO sys_menu (menu_id, menu_name, parent_id, order_num, path, component, query_param, is_frame, is_cache, menu_type, visible, status, perms, icon, active_menu, ext, create_dept, create_by, create_time, update_by, update_time, remark)
-VALUES (1801013, '采购项目修改', 1801010, 3, '#', NULL, NULL, 'N', 'Y', 'F', '0', '0', 'procurement:project:edit', '#', NULL, NULL, NULL, @admin_id, sysdate(), NULL, NULL, '');
+VALUES (1801013, '项目管理修改', 1801010, 3, '#', NULL, NULL, 'N', 'Y', 'F', '0', '0', 'procurement:project:edit', '#', NULL, NULL, NULL, @admin_id, sysdate(), NULL, NULL, '');
 INSERT INTO sys_menu (menu_id, menu_name, parent_id, order_num, path, component, query_param, is_frame, is_cache, menu_type, visible, status, perms, icon, active_menu, ext, create_dept, create_by, create_time, update_by, update_time, remark)
-VALUES (1801014, '采购项目删除', 1801010, 4, '#', NULL, NULL, 'N', 'Y', 'F', '0', '0', 'procurement:project:remove', '#', NULL, NULL, NULL, @admin_id, sysdate(), NULL, NULL, '');
+VALUES (1801014, '项目管理删除', 1801010, 4, '#', NULL, NULL, 'N', 'Y', 'F', '0', '0', 'procurement:project:remove', '#', NULL, NULL, NULL, @admin_id, sysdate(), NULL, NULL, '');
 INSERT INTO sys_menu (menu_id, menu_name, parent_id, order_num, path, component, query_param, is_frame, is_cache, menu_type, visible, status, perms, icon, active_menu, ext, create_dept, create_by, create_time, update_by, update_time, remark)
-VALUES (1801015, '采购项目导出', 1801010, 5, '#', NULL, NULL, 'N', 'Y', 'F', '0', '0', 'procurement:project:export', '#', NULL, NULL, NULL, @admin_id, sysdate(), NULL, NULL, '');
+VALUES (1801015, '项目管理导出', 1801010, 5, '#', NULL, NULL, 'N', 'Y', 'F', '0', '0', 'procurement:project:export', '#', NULL, NULL, NULL, @admin_id, sysdate(), NULL, NULL, '');
 
 -- 供应商管理
 INSERT INTO sys_menu (menu_id, menu_name, parent_id, order_num, path, component, query_param, is_frame, is_cache, menu_type, visible, status, perms, icon, active_menu, ext, create_dept, create_by, create_time, update_by, update_time, remark)
@@ -297,28 +297,48 @@ VALUES (1803003, 3, '固定资产', 'fixed_asset', 'pms_purchase_type', '', 'war
 
 -- ============================================================
 -- 8. 采购申请流程定义（Warm-Flow，6.x 流程表仍带 tenant_id，沿用 '000000'）
+--    结构：start → apply(申请人,${initiator}) → leader(项目负责人,${leaderId})
+--          → contact(采购对接人,${contactId}) → end
+--    说明：start 后第一个节点必须是"申请人"节点，startCompleteTask 提交时完成它，
+--          随后流转到 leader 由项目负责人审批，再流转到 contact 由对接人审批。
 -- ============================================================
 DELETE FROM flow_definition WHERE flow_code = 'pms_request' AND tenant_id = '000000';
-DELETE FROM flow_node WHERE id IN (900000000000000011, 900000000000000012, 900000000000000013);
-DELETE FROM flow_skip WHERE id IN (900000000000000021, 900000000000000022, 900000000000000023);
+DELETE FROM flow_node WHERE definition_id = 900000000000000001;
+DELETE FROM flow_skip WHERE definition_id = 900000000000000001;
 
 INSERT INTO flow_definition (`id`, `flow_code`, `flow_name`, `model_value`, `category`, `version`, `is_publish`, `form_custom`, `form_path`, `activity_status`, `listener_type`, `listener_path`, `ext`, `create_time`, `create_by`, `update_time`, `update_by`, `del_flag`, `tenant_id`)
 VALUES (900000000000000001, 'pms_request', '采购申请审批', 'CLASSICS', '100', '1.0', 1, 'N', NULL, 1, NULL, NULL, NULL, sysdate(), '1', sysdate(), '1', '0', '000000');
 
 INSERT INTO flow_node (`id`, `node_type`, `definition_id`, `node_code`, `node_name`, `permission_flag`, `node_ratio`, `coordinate`, `any_node_skip`, `listener_type`, `listener_path`, `form_custom`, `form_path`, `version`, `create_time`, `create_by`, `update_time`, `update_by`, `ext`, `del_flag`, `tenant_id`)
-VALUES (900000000000000011, 0, 900000000000000001, 'start', '开始', NULL, NULL, '100,50', NULL, NULL, NULL, 'N', NULL, '1.0', sysdate(), '1', sysdate(), '1', NULL, '0', '000000');
+VALUES (900000000000000011, 0, 900000000000000001, 'start', '开始', NULL, '0.000', '80,120|80,120', NULL, NULL, NULL, 'N', '/procurement/request/detail', '1.0', sysdate(), '1', sysdate(), '1', NULL, '0', '000000');
 
 INSERT INTO flow_node (`id`, `node_type`, `definition_id`, `node_code`, `node_name`, `permission_flag`, `node_ratio`, `coordinate`, `any_node_skip`, `listener_type`, `listener_path`, `form_custom`, `form_path`, `version`, `create_time`, `create_by`, `update_time`, `update_by`, `ext`, `del_flag`, `tenant_id`)
-VALUES (900000000000000012, 1, 900000000000000001, 'manager', '审批', '${initiator}', NULL, '300,50', NULL, NULL, NULL, 'N', NULL, '1.0', sysdate(), '1', sysdate(), '1', NULL, '0', '000000');
+VALUES (900000000000000012, 1, 900000000000000001, 'apply', '申请人', '${initiator}', '0.000', '300,120|300,120', NULL, NULL, NULL, 'N', '/procurement/request/detail', '1.0', sysdate(), '1', sysdate(), '1', NULL, '0', '000000');
 
 INSERT INTO flow_node (`id`, `node_type`, `definition_id`, `node_code`, `node_name`, `permission_flag`, `node_ratio`, `coordinate`, `any_node_skip`, `listener_type`, `listener_path`, `form_custom`, `form_path`, `version`, `create_time`, `create_by`, `update_time`, `update_by`, `ext`, `del_flag`, `tenant_id`)
-VALUES (900000000000000013, 2, 900000000000000001, 'end', '结束', NULL, NULL, '500,50', NULL, NULL, NULL, 'N', NULL, '1.0', sysdate(), '1', sysdate(), '1', NULL, '0', '000000');
+VALUES (900000000000000013, 1, 900000000000000001, 'leader', '项目负责人审批', '${leaderId}', '0.000', '520,120|520,120', NULL, NULL, NULL, 'N', '/procurement/request/detail', '1.0', sysdate(), '1', sysdate(), '1', NULL, '0', '000000');
+
+INSERT INTO flow_node (`id`, `node_type`, `definition_id`, `node_code`, `node_name`, `permission_flag`, `node_ratio`, `coordinate`, `any_node_skip`, `listener_type`, `listener_path`, `form_custom`, `form_path`, `version`, `create_time`, `create_by`, `update_time`, `update_by`, `ext`, `del_flag`, `tenant_id`)
+VALUES (900000000000000014, 1, 900000000000000001, 'contact', '采购对接人审批', '${contactId}', '0.000', '740,120|740,120', NULL, NULL, NULL, 'N', '/procurement/request/detail', '1.0', sysdate(), '1', sysdate(), '1', NULL, '0', '000000');
+
+INSERT INTO flow_node (`id`, `node_type`, `definition_id`, `node_code`, `node_name`, `permission_flag`, `node_ratio`, `coordinate`, `any_node_skip`, `listener_type`, `listener_path`, `form_custom`, `form_path`, `version`, `create_time`, `create_by`, `update_time`, `update_by`, `ext`, `del_flag`, `tenant_id`)
+VALUES (900000000000000015, 2, 900000000000000001, 'end', '结束', NULL, '0.000', '960,120|960,120', NULL, NULL, NULL, 'N', '/procurement/request/detail', '1.0', sysdate(), '1', sysdate(), '1', NULL, '0', '000000');
 
 INSERT INTO flow_skip (`id`, `definition_id`, `now_node_code`, `now_node_type`, `next_node_code`, `next_node_type`, `skip_name`, `skip_type`, `skip_condition`, `coordinate`, `create_time`, `create_by`, `update_time`, `update_by`, `del_flag`, `tenant_id`)
-VALUES (900000000000000021, 900000000000000001, 'start', 0, 'manager', 1, '提交', 'PASS', NULL, NULL, sysdate(), '1', sysdate(), '1', '0', '000000');
+VALUES (900000000000000021, 900000000000000001, 'start', 0, 'apply', 1, '提交', 'PASS', NULL, NULL, sysdate(), '1', sysdate(), '1', '0', '000000');
 
 INSERT INTO flow_skip (`id`, `definition_id`, `now_node_code`, `now_node_type`, `next_node_code`, `next_node_type`, `skip_name`, `skip_type`, `skip_condition`, `coordinate`, `create_time`, `create_by`, `update_time`, `update_by`, `del_flag`, `tenant_id`)
-VALUES (900000000000000022, 900000000000000001, 'manager', 1, 'end', 2, '通过', 'PASS', NULL, NULL, sysdate(), '1', sysdate(), '1', '0', '000000');
+VALUES (900000000000000022, 900000000000000001, 'apply', 1, 'leader', 1, '提交', 'PASS', NULL, NULL, sysdate(), '1', sysdate(), '1', '0', '000000');
 
 INSERT INTO flow_skip (`id`, `definition_id`, `now_node_code`, `now_node_type`, `next_node_code`, `next_node_type`, `skip_name`, `skip_type`, `skip_condition`, `coordinate`, `create_time`, `create_by`, `update_time`, `update_by`, `del_flag`, `tenant_id`)
-VALUES (900000000000000023, 900000000000000001, 'manager', 1, 'start', 0, '退回', 'REJECT', NULL, NULL, sysdate(), '1', sysdate(), '1', '0', '000000');
+VALUES (900000000000000023, 900000000000000001, 'leader', 1, 'contact', 1, '通过', 'PASS', NULL, NULL, sysdate(), '1', sysdate(), '1', '0', '000000');
+
+INSERT INTO flow_skip (`id`, `definition_id`, `now_node_code`, `now_node_type`, `next_node_code`, `next_node_type`, `skip_name`, `skip_type`, `skip_condition`, `coordinate`, `create_time`, `create_by`, `update_time`, `update_by`, `del_flag`, `tenant_id`)
+VALUES (900000000000000024, 900000000000000001, 'contact', 1, 'end', 2, '通过', 'PASS', NULL, NULL, sysdate(), '1', sysdate(), '1', '0', '000000');
+
+INSERT INTO flow_skip (`id`, `definition_id`, `now_node_code`, `now_node_type`, `next_node_code`, `next_node_type`, `skip_name`, `skip_type`, `skip_condition`, `coordinate`, `create_time`, `create_by`, `update_time`, `update_by`, `del_flag`, `tenant_id`)
+VALUES (900000000000000025, 900000000000000001, 'leader', 1, 'start', 0, '退回', 'REJECT', NULL, NULL, sysdate(), '1', sysdate(), '1', '0', '000000');
+
+INSERT INTO flow_skip (`id`, `definition_id`, `now_node_code`, `now_node_type`, `next_node_code`, `next_node_type`, `skip_name`, `skip_type`, `skip_condition`, `coordinate`, `create_time`, `create_by`, `update_time`, `update_by`, `del_flag`, `tenant_id`)
+VALUES (900000000000000026, 900000000000000001, 'contact', 1, 'start', 0, '退回', 'REJECT', NULL, NULL, sysdate(), '1', sysdate(), '1', '0', '000000');
+

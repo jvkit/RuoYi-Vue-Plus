@@ -56,9 +56,19 @@ public class PmsProject extends BaseEntity {
     private String leader;
 
     /**
+     * 项目负责人用户ID（审批流分派用）
+     */
+    private Long leaderId;
+
+    /**
      * 项目预算
      */
     private BigDecimal budget;
+
+    /**
+     * 已用金额（系统累计，采购申请通过后累加）
+     */
+    private BigDecimal usedAmount;
 
     /**
      * 开始日期

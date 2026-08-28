@@ -43,9 +43,19 @@ public class PmsProcurementRequestBo extends BaseEntity {
     private String requestCode;
 
     /**
-     * 申请标题
+     * 申请标题（自动拼接：【自购/对公】+项目名+月份月日期日+名称）
      */
     private String title;
+
+    /**
+     * 标题类型（自购/对公）
+     */
+    private String titleType;
+
+    /**
+     * 标题名称（用户填写，参与标题拼接）
+     */
+    private String titleName;
 
     /**
      * 项目ID
@@ -54,9 +64,24 @@ public class PmsProcurementRequestBo extends BaseEntity {
     private Long projectId;
 
     /**
-     * 供应商ID
+     * 采购对接人（系统自动带出，提交者不选）
      */
-    private Long supplierId;
+    private String procurementContact;
+
+    /**
+     * 付款截图（自购必填）
+     */
+    private String paymentScreenshot;
+
+    /**
+     * 报价单（对公必填）
+     */
+    private String quotationUrl;
+
+    /**
+     * 开票信息JSON（对公必填）
+     */
+    private String invoiceInfoJson;
 
     /**
      * 总金额
@@ -77,6 +102,11 @@ public class PmsProcurementRequestBo extends BaseEntity {
      * 状态
      */
     private String status;
+
+    /**
+     * 验收标志（none未验收/processing验收中/done已完成验收）
+     */
+    private String acceptanceStatus;
 
     /**
      * 流程实例ID

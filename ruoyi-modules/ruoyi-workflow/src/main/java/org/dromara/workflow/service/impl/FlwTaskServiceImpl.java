@@ -51,6 +51,8 @@ import org.dromara.workflow.domain.vo.FlowCopyVo;
 import org.dromara.workflow.domain.vo.FlowHisTaskVo;
 import org.dromara.workflow.domain.vo.FlowTaskVo;
 import org.dromara.workflow.domain.vo.NodeExtVo;
+import org.dromara.workflow.common.enums.ButtonPermissionEnum;
+import org.dromara.workflow.domain.vo.ButtonPermissionVo;
 import org.dromara.workflow.mapper.FlwCategoryMapper;
 import org.dromara.workflow.mapper.FlwHisTaskMapper;
 import org.dromara.workflow.mapper.FlwTaskMapper;
@@ -62,6 +64,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static org.dromara.workflow.common.constant.FlowConstant.*;
 
@@ -523,11 +526,14 @@ public class FlwTaskServiceImpl implements IFlwTaskService {
             throw new NullPointerException("当前【" + flowTaskVo.getNodeCode() + "】节点编码不存在");
         }
         NodeExtVo nodeExtVo = flwNodeExtService.parseNodeExt(flowNode.getExt(), instance.getVariableMap());
-        //设置按钮权限
+        //设置按钮权限：节点 ext 未配置时回退到默认全量（ButtonPermissionEnum 中 selected=true 的按钮）
         if (CollUtil.isNotEmpty(nodeExtVo.getButtonPermissions())) {
             flowTaskVo.setButtonList(nodeExtVo.getButtonPermissions());
         } else {
-            flowTaskVo.setButtonList(new ArrayList<>());
+            List<ButtonPermissionVo> defaultButtons = Arrays.stream(ButtonPermissionEnum.values())
+                .map(e -> new ButtonPermissionVo(e.getValue(), e.isSelected()))
+                .collect(Collectors.toList());
+            flowTaskVo.setButtonList(defaultButtons);
         }
         if (CollUtil.isNotEmpty(nodeExtVo.getCopySettings())) {
             List<FlowCopyVo> list = StreamUtils.toList(nodeExtVo.getCopySettings(), x -> new FlowCopyVo(Convert.toLong(x)));

@@ -23,6 +23,7 @@
         <module>ruoyi-workflow</module>
         <module>ruoyi-ai</module>
         <module>ruoyi-procurement</module>
+        <module>ruoyi-invoice</module>
     </modules>
 
 </project>

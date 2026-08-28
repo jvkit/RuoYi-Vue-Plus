@@ -10,6 +10,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.dromara.workflow.api.domain.StartProcessDTO;
+import org.dromara.workflow.api.domain.StartProcessReturnDTO;
 import org.dromara.workflow.api.event.ProcessDeleteEvent;
 import org.dromara.workflow.api.event.ProcessEvent;
 import org.dromara.common.core.enums.BusinessStatusEnum;
@@ -23,12 +24,17 @@ import org.dromara.common.mybatis.core.page.PageQuery;
 import org.dromara.common.core.domain.PageResult;
 import org.dromara.procurement.domain.PmsProcurementRequest;
 import org.dromara.procurement.domain.PmsProcurementRequestItem;
+import org.dromara.procurement.domain.PmsProject;
+import org.dromara.procurement.domain.PmsFundFlow;
 import org.dromara.procurement.domain.bo.PmsProcurementRequestBo;
 import org.dromara.procurement.domain.bo.PmsProcurementRequestItemBo;
 import org.dromara.procurement.domain.vo.PmsProcurementRequestItemVo;
 import org.dromara.procurement.domain.vo.PmsProcurementRequestVo;
 import org.dromara.procurement.mapper.PmsProcurementRequestItemMapper;
 import org.dromara.procurement.mapper.PmsProcurementRequestMapper;
+import org.dromara.procurement.mapper.PmsProjectMapper;
+import org.dromara.procurement.mapper.PmsFundFlowMapper;
+import org.dromara.procurement.mapper.PmsFlowApproverMapper;
 import org.dromara.procurement.service.IPmsProcurementRequestService;
 import org.dromara.procurement.utils.PmsPlatformUtil;
 import org.springframework.context.event.EventListener;
@@ -39,8 +45,11 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -67,7 +76,32 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
 
     private final PmsProcurementRequestMapper baseMapper;
     private final PmsProcurementRequestItemMapper itemMapper;
+    private final PmsProjectMapper projectMapper;
+    private final PmsFlowApproverMapper flowApproverMapper;
+    private final PmsFundFlowMapper fundFlowMapper;
     private final WorkflowService workflowService;
+
+    /**
+     * 已导出的文件名集合（按天），用于导出 Excel 同名时追加三位序数
+     */
+    private static final Map<String, Set<String>> EXPORTED_FILE_NAMES = new ConcurrentHashMap<>();
+
+    /**
+     * 批量填充当前审批人（从流程 waiting 任务动态查询，不硬编码）
+     */
+    private void fillCurrentApprover(List<PmsProcurementRequestVo> list) {
+        if (list == null || list.isEmpty()) {
+            return;
+        }
+        for (PmsProcurementRequestVo vo : list) {
+            if (vo.getProcessInstanceId() != null) {
+                List<String> names = flowApproverMapper.selectCurrentApproverNames(vo.getProcessInstanceId());
+                if (CollUtil.isNotEmpty(names)) {
+                    vo.setCurrentApprover(String.join("、", names));
+                }
+            }
+        }
+    }
 
     @Override
     public PmsProcurementRequestVo queryById(Long id) {
@@ -78,6 +112,12 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
                     .eq(PmsProcurementRequestItem::getRequestId, id)
                     .orderByAsc(PmsProcurementRequestItem::getSortNo));
             vo.setItems(items);
+            if (vo.getProcessInstanceId() != null) {
+                List<String> names = flowApproverMapper.selectCurrentApproverNames(vo.getProcessInstanceId());
+                if (CollUtil.isNotEmpty(names)) {
+                    vo.setCurrentApprover(String.join("、", names));
+                }
+            }
         }
         return vo;
     }
@@ -86,6 +126,7 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
     public PageResult<PmsProcurementRequestVo> queryPageList(PmsProcurementRequestBo bo, PageQuery pageQuery) {
         Page<PmsProcurementRequestVo> page = pageQuery.build();
         baseMapper.selectVoPageList(page, bo);
+        fillCurrentApprover(page.getRecords());
         return PageResult.build(page.getRecords(), page.getTotal());
     }
 
@@ -93,6 +134,7 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
     public List<PmsProcurementRequestVo> queryList(PmsProcurementRequestBo bo) {
         Page<PmsProcurementRequestVo> page = new Page<>(1, Integer.MAX_VALUE);
         baseMapper.selectVoPageList(page, bo);
+        fillCurrentApprover(page.getRecords());
         return page.getRecords();
     }
 
@@ -105,6 +147,7 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
         if (StringUtils.isBlank(bo.getStatus())) {
             bo.setStatus(BusinessStatusEnum.DRAFT.getStatus());
         }
+        bo.setTitle(buildTitle(bo));
         calcHeaderAmount(bo);
         PmsProcurementRequest add = MapstructUtils.convert(bo, PmsProcurementRequest.class);
         boolean flag = baseMapper.insert(add) > 0;
@@ -126,6 +169,7 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
             throw new ServiceException("采购申请不存在");
         }
         calcHeaderAmount(bo);
+        bo.setTitle(buildTitle(bo));
         PmsProcurementRequest update = MapstructUtils.convert(bo, PmsProcurementRequest.class);
         boolean flag = baseMapper.updateById(update) > 0;
         if (flag) {
@@ -139,9 +183,52 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Boolean deleteWithValidByIds(Collection<Long> ids, Boolean isValid) {
+        // 删除前同步清理资金：已审批通过的申请需要扣减项目已用金额并删除资金流水
+        List<PmsProcurementRequest> finishedRequests = baseMapper.selectList(
+            Wrappers.<PmsProcurementRequest>lambdaQuery()
+                .in(PmsProcurementRequest::getId, ids)
+                .eq(PmsProcurementRequest::getStatus, BusinessStatusEnum.FINISH.getStatus())
+                .eq(PmsProcurementRequest::getDelFlag, 0L));
+        for (PmsProcurementRequest request : finishedRequests) {
+            rollbackUsedAmount(request);
+            deleteFundFlow(request.getId());
+        }
+
         itemMapper.delete(Wrappers.<PmsProcurementRequestItem>lambdaQuery()
             .in(PmsProcurementRequestItem::getRequestId, ids));
         return baseMapper.deleteByIds(ids) > 0;
+    }
+
+    /**
+     * 扣减项目已用金额（采购申请删除时回滚）
+     */
+    private void rollbackUsedAmount(PmsProcurementRequest request) {
+        if (ObjectUtil.isNull(request.getProjectId()) || ObjectUtil.isNull(request.getAmount())) {
+            return;
+        }
+        PmsProject project = projectMapper.selectById(request.getProjectId());
+        if (ObjectUtil.isNull(project)) {
+            return;
+        }
+        BigDecimal used = ObjectUtil.isNull(project.getUsedAmount()) ? BigDecimal.ZERO : project.getUsedAmount();
+        BigDecimal remain = used.subtract(request.getAmount());
+        project.setUsedAmount(remain.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : remain);
+        projectMapper.updateById(project);
+        log.info("项目已用金额回滚：projectId={}, rollbackAmount={}, newUsedAmount={}",
+            request.getProjectId(), request.getAmount(), project.getUsedAmount());
+    }
+
+    /**
+     * 删除采购申请对应的资金流水（幂等）
+     */
+    private void deleteFundFlow(Long requestId) {
+        if (ObjectUtil.isNull(requestId)) {
+            return;
+        }
+        fundFlowMapper.delete(Wrappers.<PmsFundFlow>lambdaQuery()
+            .eq(PmsFundFlow::getRequestId, requestId)
+            .eq(PmsFundFlow::getFlowType, "out"));
+        log.info("资金流水已删除：requestId={}", requestId);
     }
 
     @Override
@@ -149,6 +236,16 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
         PmsProcurementRequestBo bo = new PmsProcurementRequestBo();
         bo.setStatus(BusinessStatusEnum.FINISH.getStatus());
         return queryList(bo);
+    }
+
+    /**
+     * 可验收的采购申请：已审批通过（finish）且验收标志为 none 或 null（尚未创建验收单）
+     */
+    @Override
+    public List<PmsProcurementRequestVo> queryAcceptableList() {
+        List<PmsProcurementRequestVo> list = baseMapper.selectAcceptableList();
+        fillCurrentApprover(list);
+        return list;
     }
 
     @Override
@@ -166,16 +263,29 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
         }
 
         PmsProcurementRequest request = baseMapper.selectById(bo.getId());
+        // 提交时校验资金：总金额 ≤ 项目剩余资金，超出直接拒绝
+        checkBudget(bo);
+        PmsProject project = projectMapper.selectById(request.getProjectId());
+        if (project == null || project.getLeaderId() == null) {
+            throw new ServiceException("请先为项目配置负责人（用户）");
+        }
         StartProcessDTO startProcess = new StartProcessDTO();
         startProcess.setBusinessId(request.getId().toString());
         startProcess.setFlowCode("pms_request");
         Map<String, Object> variables = new HashMap<>();
-        variables.put("ignore", true);
+        variables.put("leaderId", project.getLeaderId().toString());
+        // 申请总金额：流程条件分支 leader -> team_leader(<1000) / dept_leader(>=1000)
+        BigDecimal amount = ObjectUtil.isNull(request.getAmount()) ? BigDecimal.ZERO : request.getAmount();
+        variables.put("amount", amount);
         startProcess.setVariables(variables);
-        boolean ok = workflowService.startCompleteTask(startProcess);
-        if (!ok) {
+        // startCompleteTask = 启动流程 + 提交首个（申请人）节点，触发总体流程监听，
+        // 由 processHandler 将实例推进到 leader 节点并把单据状态置为 waiting。
+        boolean started = workflowService.startCompleteTask(startProcess);
+        if (!started) {
             throw new ServiceException("流程发起失败");
         }
+        request.setStatus(BusinessStatusEnum.WAITING.getStatus());
+        baseMapper.updateById(request);
         return queryById(request.getId());
     }
 
@@ -189,6 +299,7 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
         if (ObjectUtil.isNull(request)) {
             return;
         }
+        String oldStatus = request.getStatus();
         request.setStatus(processEvent.getStatus());
         request.setProcessInstanceId(processEvent.getInstanceId());
         if (Boolean.TRUE.equals(processEvent.getSubmit())) {
@@ -200,6 +311,60 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
             log.info("采购申请提交");
         }
         baseMapper.updateById(request);
+        // 审批通过（进入完成态）时累加项目已用金额，防重复累加
+        if (BusinessStatusEnum.FINISH.getStatus().equals(request.getStatus())
+            && !BusinessStatusEnum.FINISH.getStatus().equals(oldStatus)) {
+            accumulateUsedAmount(request);
+            createFundFlow(request);
+        }
+    }
+
+    /**
+     * 审批通过后写入资金流水（幂等：同一申请只写一条 out 流水）
+     */
+    private void createFundFlow(PmsProcurementRequest request) {
+        if (ObjectUtil.isNull(request.getAmount()) || request.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+        long exist = fundFlowMapper.selectCount(Wrappers.<PmsFundFlow>lambdaQuery()
+            .eq(PmsFundFlow::getRequestId, request.getId())
+            .eq(PmsFundFlow::getFlowType, "out"));
+        if (exist > 0) {
+            return;
+        }
+        PmsFundFlow flow = new PmsFundFlow();
+        flow.setFlowNo("FUND-" + java.time.LocalDate.now().toString().replace("-", "")
+            + "-" + String.format("%03d", exist + 1));
+        flow.setFlowType("out");
+        flow.setRequestId(request.getId());
+        flow.setRequestCode(request.getRequestCode());
+        flow.setRequestTitle(request.getTitle());
+        flow.setAmount(request.getAmount());
+        flow.setOccurDate(java.time.LocalDate.now());
+        flow.setProjectId(request.getProjectId());
+        PmsProject project = projectMapper.selectById(request.getProjectId());
+        if (ObjectUtil.isNotNull(project)) {
+            flow.setProjectName(project.getProjectName());
+            flow.setOperatorId(project.getLeaderId());
+        }
+        flow.setOperatorName(LoginHelper.getUsername());
+        flow.setRemark("采购申请审批通过自动记录");
+        fundFlowMapper.insert(flow);
+        log.info("资金流水已记录：申请[{}] 金额[{}]", request.getId(), request.getAmount());
+    }
+
+    /**
+     * 审批通过后累加项目已用金额
+     */
+    private void accumulateUsedAmount(PmsProcurementRequest request) {
+        PmsProject project = projectMapper.selectById(request.getProjectId());
+        if (ObjectUtil.isNull(project)) {
+            return;
+        }
+        BigDecimal used = ObjectUtil.isNull(project.getUsedAmount()) ? BigDecimal.ZERO : project.getUsedAmount();
+        BigDecimal amount = ObjectUtil.isNull(request.getAmount()) ? BigDecimal.ZERO : request.getAmount();
+        project.setUsedAmount(used.add(amount));
+        projectMapper.updateById(project);
     }
 
     /**
@@ -219,6 +384,26 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
     }
 
     /**
+     * 资金校验：总金额 ≤ 项目剩余资金（预算 - 已用），超出直接拒绝
+     */
+    private void checkBudget(PmsProcurementRequestBo bo) {
+        if (bo.getProjectId() == null) {
+            throw new ServiceException("请选择项目");
+        }
+        PmsProject project = projectMapper.selectById(bo.getProjectId());
+        if (ObjectUtil.isNull(project)) {
+            throw new ServiceException("项目不存在");
+        }
+        BigDecimal budget = ObjectUtil.isNull(project.getBudget()) ? BigDecimal.ZERO : project.getBudget();
+        BigDecimal used = ObjectUtil.isNull(project.getUsedAmount()) ? BigDecimal.ZERO : project.getUsedAmount();
+        BigDecimal remaining = budget.subtract(used);
+        BigDecimal amount = ObjectUtil.isNull(bo.getAmount()) ? BigDecimal.ZERO : bo.getAmount();
+        if (amount.compareTo(remaining) > 0) {
+            throw new ServiceException("采购总金额超出项目剩余资金（剩余 " + remaining.stripTrailingZeros().toPlainString() + " 元），申请被拒绝");
+        }
+    }
+
+    /**
      * 保存申请明细
      */
     private void saveItems(Long requestId, List<PmsProcurementRequestItemBo> itemBos) {
@@ -229,6 +414,8 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
         int sort = 1;
         for (PmsProcurementRequestItemBo itemBo : itemBos) {
             PmsProcurementRequestItem item = MapstructUtils.convert(itemBo, PmsProcurementRequestItem.class);
+            // 先删后插重建明细：清空回传 id，重新生成主键，避免主键冲突
+            item.setId(null);
             item.setRequestId(requestId);
             if (ObjectUtil.isNull(item.getSortNo())) {
                 item.setSortNo(sort++);
@@ -274,14 +461,40 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
     }
 
     /**
-     * 生成申请编号 PR-yyyyMMdd-NNN
+     * 生成申请编号 purq-yyyyMMdd-NNN
      */
     private String generateRequestCode() {
-        String prefix = "PR-" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "-";
+        String prefix = "purq-" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "-";
         LambdaQueryWrapper<PmsProcurementRequest> lqw = Wrappers.lambdaQuery();
         lqw.likeRight(PmsProcurementRequest::getRequestCode, prefix);
         long count = baseMapper.selectCount(lqw);
         return prefix + String.format("%03d", count + 1);
+    }
+
+    /**
+     * 拼接申请标题：【自购/对公】+项目名+月份月日期日+名称
+     */
+    private String buildTitle(PmsProcurementRequestBo bo) {
+        boolean hasType = StringUtils.isNotBlank(bo.getTitleType());
+        boolean hasName = StringUtils.isNotBlank(bo.getTitleName());
+        if (!hasType && !hasName) {
+            // 标题类型与名称均未填写时，保留前端传入的标题
+            return bo.getTitle();
+        }
+        String type = hasType ? bo.getTitleType() : "自购";
+        if (!type.startsWith("【")) {
+            type = "【" + type + "】";
+        }
+        String projectName = "";
+        if (ObjectUtil.isNotNull(bo.getProjectId())) {
+            PmsProject project = projectMapper.selectById(bo.getProjectId());
+            if (ObjectUtil.isNotNull(project)) {
+                projectName = project.getProjectName();
+            }
+        }
+        String date = LocalDate.now().format(DateTimeFormatter.ofPattern("MM月dd日"));
+        String name = bo.getTitleName() == null ? "" : bo.getTitleName();
+        return type + projectName + "_" + date + "_" + name;
     }
 
     /**
@@ -339,7 +552,8 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
                 }
                 response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
                 String title = StringUtils.isNotBlank(vo.getTitle()) ? vo.getTitle() : vo.getRequestCode();
-                String filename = "采购申请表_" + title + ".xlsx";
+                // 文件名 = 标题 + .xlsx，同名时追加三位序数避免重复
+                String filename = dedupFileName(title + ".xlsx");
                 String encoded = URLEncoder.encode(filename, StandardCharsets.UTF_8);
                 response.setHeader("Content-Disposition", "attachment; filename=\"" + encoded + "\"; filename*=UTF-8''" + encoded);
                 try (OutputStream os = response.getOutputStream()) {
@@ -350,6 +564,28 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
         } catch (IOException e) {
             log.error("导出采购申请表失败", e);
             throw new ServiceException("导出采购申请表失败：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 导出文件名防重：当天已导出过同名文件时，追加三位序数（_001、_002…）
+     */
+    private String dedupFileName(String baseFileName) {
+        String day = LocalDate.now().toString();
+        Set<String> names = EXPORTED_FILE_NAMES.computeIfAbsent(day, k -> ConcurrentHashMap.newKeySet());
+        synchronized (names) {
+            if (names.add(baseFileName)) {
+                return baseFileName;
+            }
+            int seq = 1;
+            String base = baseFileName.replaceFirst("\\.xlsx$", "");
+            while (true) {
+                String candidate = base + "_" + String.format("%03d", seq) + ".xlsx";
+                if (names.add(candidate)) {
+                    return candidate;
+                }
+                seq++;
+            }
         }
     }
 

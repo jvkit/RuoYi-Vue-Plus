@@ -321,3 +321,9 @@ justauth:
       client-id: 10**********6
       client-secret: 1f7d08**********5b7**********29e
       redirect-uri: ${justauth.address}/social-callback?source=gitea
+
+--- # Dify AI配置（发票AI识别/审核）
+dify:
+  api-url: http://172.16.16.110:8090
+  app-id: fc04cb5d-0d6c-42b1-8dfd-7c6755827d2d
+  api-key: app-22cb3e89ff524629af078ee3af77ac08

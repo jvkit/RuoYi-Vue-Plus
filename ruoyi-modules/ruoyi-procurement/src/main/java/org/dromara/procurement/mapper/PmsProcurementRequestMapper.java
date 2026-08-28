@@ -7,6 +7,8 @@ import org.dromara.procurement.domain.PmsProcurementRequest;
 import org.dromara.procurement.domain.bo.PmsProcurementRequestBo;
 import org.dromara.procurement.domain.vo.PmsProcurementRequestVo;
 
+import java.util.List;
+
 /**
  * 采购管理-采购申请Mapper接口
  *
@@ -18,5 +20,10 @@ public interface PmsProcurementRequestMapper extends BaseMapperPlus<PmsProcureme
      * 查询采购申请分页列表（关联项目、供应商）
      */
     Page<PmsProcurementRequestVo> selectVoPageList(@Param("page") Page<PmsProcurementRequestVo> page, @Param("bo") PmsProcurementRequestBo bo);
+
+    /**
+     * 查询可验收的采购申请列表（关联项目）
+     */
+    List<PmsProcurementRequestVo> selectAcceptableList();
 
 }

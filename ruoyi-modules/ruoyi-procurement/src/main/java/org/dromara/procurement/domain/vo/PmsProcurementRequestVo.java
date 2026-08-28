@@ -9,7 +9,7 @@ import org.dromara.procurement.domain.PmsProcurementRequest;
 import java.io.Serial;
 import java.io.Serializable;
 import java.math.BigDecimal;
-import java.util.Date;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -44,6 +44,18 @@ public class PmsProcurementRequestVo implements Serializable {
     private String title;
 
     /**
+     * 标题类型（自购/对公）
+     */
+    @ExcelProperty(value = "标题类型")
+    private String titleType;
+
+    /**
+     * 标题名称
+     */
+    @ExcelProperty(value = "标题名称")
+    private String titleName;
+
+    /**
      * 项目ID
      */
     @ExcelProperty(value = "项目ID")
@@ -56,16 +68,41 @@ public class PmsProcurementRequestVo implements Serializable {
     private String projectName;
 
     /**
-     * 供应商ID
+     * 项目负责人（自动带出）
      */
-    @ExcelProperty(value = "供应商ID")
-    private Long supplierId;
+    @ExcelProperty(value = "项目负责人")
+    private String leader;
 
     /**
-     * 供应商名称
+     * 采购对接人（自动带出）
      */
-    @ExcelProperty(value = "供应商")
-    private String supplierName;
+    @ExcelProperty(value = "采购对接人")
+    private String procurementContact;
+
+    /**
+     * 当前审批人（流程运行中动态查询，不硬编码）
+     */
+    private String currentApprover;
+
+    /**
+     * 付款截图
+     */
+    private String paymentScreenshot;
+
+    /**
+     * 报价单
+     */
+    private String quotationUrl;
+
+    /**
+     * 开票信息JSON
+     */
+    private String invoiceInfoJson;
+
+    /**
+     * 项目剩余资金（前端提示用）
+     */
+    private BigDecimal remainingBudget;
 
     /**
      * 总金额
@@ -92,6 +129,12 @@ public class PmsProcurementRequestVo implements Serializable {
     private String status;
 
     /**
+     * 验收标志（none未验收/processing验收中/done已完成验收）
+     */
+    @ExcelProperty(value = "验收标志")
+    private String acceptanceStatus;
+
+    /**
      * 流程实例ID
      */
     @ExcelProperty(value = "流程实例ID")
@@ -107,13 +150,13 @@ public class PmsProcurementRequestVo implements Serializable {
      * 创建时间
      */
     @ExcelProperty(value = "创建时间")
-    private Date createTime;
+    private LocalDateTime createTime;
 
     /**
      * 更新时间
      */
     @ExcelProperty(value = "更新时间")
-    private Date updateTime;
+    private LocalDateTime updateTime;
 
     /**
      * 申请明细

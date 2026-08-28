@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
 import org.dromara.common.core.domain.R;
+import org.dromara.common.core.enums.BusinessStatusEnum;
 import org.dromara.common.core.utils.ValidatorUtils;
 import org.dromara.common.core.validate.AddGroup;
 import org.dromara.common.core.validate.EditGroup;
@@ -132,6 +133,37 @@ public class PmsProcurementRequestController extends BaseController {
     @SaCheckPermission("procurement:request:list")
     @GetMapping("/approvedList")
     public R<List<PmsProcurementRequestVo>> approvedList() {
+        return R.ok(requestService.queryApprovedList());
+    }
+
+    /**
+     * 查询可验收的采购申请（已审批通过且尚未创建验收单，验收下拉用）
+     */
+    @SaCheckPermission("procurement:request:list")
+    @GetMapping("/acceptableList")
+    public R<List<PmsProcurementRequestVo>> acceptableList() {
+        return R.ok(requestService.queryAcceptableList());
+    }
+
+    /**
+     * 查询已审批通过的「对公」采购申请（合同生成用）
+     */
+    @SaCheckPermission("procurement:contract:list")
+    @GetMapping("/companyList")
+    public R<List<PmsProcurementRequestVo>> companyList() {
+        PmsProcurementRequestBo bo = new PmsProcurementRequestBo();
+        bo.setStatus(BusinessStatusEnum.FINISH.getStatus());
+        bo.setTitleType("对公");
+        return R.ok(requestService.queryList(bo));
+    }
+
+    /**
+     * 查询已验收完成的采购申请（报销打包用）
+     * TODO: 待验收模块就绪后，改为按 pms_acceptance.status=finished 过滤
+     */
+    @SaCheckPermission("procurement:reimbursement:list")
+    @GetMapping("/acceptedList")
+    public R<List<PmsProcurementRequestVo>> acceptedList() {
         return R.ok(requestService.queryApprovedList());
     }
 

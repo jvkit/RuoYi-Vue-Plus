@@ -50,6 +50,15 @@ public class PmsProjectController extends BaseController {
     }
 
     /**
+     * 查询项目树形列表（用于选择器，申请人/对接人/负责人可见，不要求采购项目列表权限）
+     */
+    @SaCheckPermission("procurement:project:tree")
+    @GetMapping("/tree")
+    public R<List<PmsProjectVo>> tree() {
+        return R.ok(projectService.queryTreeList());
+    }
+
+    /**
      * 导出项目列表
      */
     @SaCheckPermission("procurement:project:export")

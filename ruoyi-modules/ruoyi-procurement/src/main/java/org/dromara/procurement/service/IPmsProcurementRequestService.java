@@ -57,6 +57,11 @@ public interface IPmsProcurementRequestService {
     List<PmsProcurementRequestVo> queryApprovedList();
 
     /**
+     * 查询可验收的采购申请（已审批通过且尚未创建验收单，验收下拉用）
+     */
+    List<PmsProcurementRequestVo> queryAcceptableList();
+
+    /**
      * 导出采购申请表 Excel（按模板填充）
      *
      * @param id       采购申请ID

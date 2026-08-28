@@ -4,15 +4,16 @@ import org.apache.fesod.sheet.annotation.ExcelIgnoreUnannotated;
 import org.apache.fesod.sheet.annotation.ExcelProperty;
 import io.github.linpeilie.annotations.AutoMapper;
 import lombok.Data;
-import org.dromara.common.translation.annotation.Translation;
-import org.dromara.common.translation.constant.TransConstant;
 import org.dromara.procurement.domain.PmsProject;
 
 import java.io.Serial;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.util.Date;
+import java.time.LocalDateTime;
 import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonFormat;
 
 /**
  * 采购管理-项目视图对象 pms_project
@@ -58,14 +59,11 @@ public class PmsProjectVo implements Serializable {
     /**
      * 归属部门ID
      */
-    @ExcelProperty(value = "归属部门ID")
     private Long deptId;
 
     /**
      * 归属部门名称
      */
-    @Translation(type = TransConstant.DEPT_ID_TO_NAME, mapper = "deptId")
-    @ExcelProperty(value = "归属部门")
     private String deptName;
 
     /**
@@ -75,21 +73,39 @@ public class PmsProjectVo implements Serializable {
     private String leader;
 
     /**
+     * 项目负责人用户ID
+     */
+    private Long leaderId;
+
+    /**
      * 项目预算
      */
     @ExcelProperty(value = "项目预算")
     private BigDecimal budget;
 
     /**
+     * 已用金额
+     */
+    @ExcelProperty(value = "已用金额")
+    private BigDecimal usedAmount;
+
+    /**
+     * 剩余资金 = 预算 - 已用（前端实时算，不入库）
+     */
+    private BigDecimal remaining;
+
+    /**
      * 开始日期
      */
     @ExcelProperty(value = "开始日期")
+    @JsonFormat(pattern = "yyyy-MM-dd")
     private Date startDate;
 
     /**
      * 结束日期
      */
     @ExcelProperty(value = "结束日期")
+    @JsonFormat(pattern = "yyyy-MM-dd")
     private Date endDate;
 
     /**
@@ -108,12 +124,12 @@ public class PmsProjectVo implements Serializable {
      * 创建时间
      */
     @ExcelProperty(value = "创建时间")
-    private Date createTime;
+    private LocalDateTime createTime;
 
     /**
      * 更新时间
      */
     @ExcelProperty(value = "更新时间")
-    private Date updateTime;
+    private LocalDateTime updateTime;
 
 }
