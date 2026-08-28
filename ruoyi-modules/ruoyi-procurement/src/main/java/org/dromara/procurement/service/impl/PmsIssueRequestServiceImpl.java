@@ -22,6 +22,7 @@ import org.dromara.procurement.domain.bo.PmsIssueRequestBo;
 import org.dromara.procurement.domain.vo.PmsIssueRequestVo;
 import org.dromara.procurement.mapper.PmsFlowApproverMapper;
 import org.dromara.procurement.mapper.PmsIssueRequestMapper;
+import org.dromara.procurement.mapper.PmsProjectMapper;
 import org.dromara.procurement.mapper.PmsStockMovementMapper;
 import org.dromara.procurement.mapper.PmsWarehouseStockMapper;
 import org.dromara.procurement.service.IPmsIssueRequestService;
@@ -37,6 +38,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Collection;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -53,6 +55,7 @@ public class PmsIssueRequestServiceImpl implements IPmsIssueRequestService {
     private final PmsIssueRequestMapper baseMapper;
     private final PmsWarehouseStockMapper warehouseStockMapper;
     private final PmsStockMovementMapper stockMovementMapper;
+    private final PmsProjectMapper projectMapper;
     private final PmsFlowApproverMapper flowApproverMapper;
     private final WorkflowService workflowService;
 
@@ -212,9 +215,27 @@ public class PmsIssueRequestServiceImpl implements IPmsIssueRequestService {
         }
 
         PmsIssueRequest entity = baseMapper.selectById(bo.getId());
+
+        // 根据库存物料关联的项目，取项目负责人作为审批人
+        Long leaderId = null;
+        if (entity.getStockId() != null) {
+            PmsWarehouseStock stock = warehouseStockMapper.selectById(entity.getStockId());
+            if (stock != null && stock.getProjectId() != null) {
+                org.dromara.procurement.domain.PmsProject project = projectMapper.selectById(stock.getProjectId());
+                if (project != null) {
+                    leaderId = project.getLeaderId();
+                }
+            }
+        }
+        if (leaderId == null) {
+            throw new ServiceException("无法确定项目负责人，请确认库存物料已关联项目");
+        }
+
         StartProcessDTO startProcess = new StartProcessDTO();
         startProcess.setBusinessId(entity.getId().toString());
         startProcess.setFlowCode("pms_issue_request");
+        startProcess.setVariables(new HashMap<>());
+        startProcess.getVariables().put("leaderId", leaderId.toString());
         boolean started = workflowService.startCompleteTask(startProcess);
         if (!started) {
             throw new ServiceException("流程发起失败");
