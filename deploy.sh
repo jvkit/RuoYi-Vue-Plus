@@ -69,8 +69,7 @@ cp -r "$OA_WORKSPACE/plus-ui-6x/dist" "$OA_DEPLOY/dist"
 NGINX_OA_ROOT="/var/www/oa"
 if [ -d "$(dirname "$NGINX_OA_ROOT")" ]; then
   log "同步 dist 到 nginx 根目录 $NGINX_OA_ROOT..."
-  sudo rm -rf "$NGINX_OA_ROOT" && sudo mkdir -p "$NGINX_OA_ROOT" && sudo cp -r "$OA_DEPLOY/dist/"* "$NGINX_OA_ROOT/" || warn "同步到 $NGINX_OA_ROOT 失败，请检查权限"
-  sudo chown -R www-data:www-data "$NGINX_OA_ROOT" 2>/dev/null || true
+  rm -rf "$NGINX_OA_ROOT" && mkdir -p "$NGINX_OA_ROOT" && cp -r "$OA_DEPLOY/dist/"* "$NGINX_OA_ROOT/" || warn "同步到 $NGINX_OA_ROOT 失败，请检查权限"
 fi
 
 # ---------- 7. 启动后端 ----------
