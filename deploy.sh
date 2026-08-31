@@ -2,23 +2,36 @@
 # ============================================================
 # OA 6x 服务器完整部署脚本
 # 运行位置：服务器 /home/liyang/jvkit/oa-workspace
-# 功能：git pull → build → SQL → 重启
+# 功能：git pull → build → SQL → langfuse → agents → 重启后端
 # ============================================================
 set -euo pipefail
 
 # 加载环境变量（兼容 ssh 非登录 shell）
 [ -f "$HOME/.profile" ] && source "$HOME/.profile"
+[ -f "$HOME/.bashrc" ] && source "$HOME/.bashrc"
 
 OA_WORKSPACE="${OA_WORKSPACE:-$HOME/jvkit/oa-workspace}"
 OA_DEPLOY="${OA_DEPLOY:-$HOME/jvkit/oa}"
 BACKEND_PORT="${BACKEND_PORT:-8092}"
 BACKEND_LOG="$OA_DEPLOY/logs/oa-backend.log"
+AGENTS_WORKSPACE="$OA_WORKSPACE/agents"
+LANGFUSE_DIR="$AGENTS_WORKSPACE/langfuse"
+AGENTS_PORT=8093
+LANGFUSE_PORT=3030
 
 log()  { echo -e "\033[1;36m[deploy]\033[0m $*"; }
 warn() { echo -e "\033[1;33m[warn]\033[0m $*"; }
 die()  { echo -e "\033[1;31m[error]\033[0m $*"; exit 1; }
 
 [ "$(whoami)" = "liyang" ] || die "请用 liyang 用户执行"
+
+# ---------- 0. 安装 uv（若不存在） ----------
+if ! command -v uv >/dev/null 2>&1; then
+  log "安装 uv..."
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  export PATH="$HOME/.local/bin:$PATH"
+fi
+export PATH="$HOME/.local/bin:$PATH"
 
 # ---------- 1. 更新代码 ----------
 log "拉取后端代码..."
@@ -46,7 +59,56 @@ corepack pnpm build:prod || die "前端构建失败"
 log "执行 SQL 增量脚本..."
 bash "$OA_WORKSPACE/ruoyi-6x/script/sql/apply-sql.sh" || die "SQL 执行失败"
 
-# ---------- 5. 停止旧后端 ----------
+# ---------- 5. 启动/重启 langfuse ----------
+if [ -d "$LANGFUSE_DIR" ]; then
+  log "启动 langfuse（端口 $LANGFUSE_PORT）..."
+  cd "$LANGFUSE_DIR"
+  docker compose down 2>/dev/null || true
+  docker compose up -d
+  log "等待 langfuse 就绪..."
+  for i in $(seq 1 60); do
+    if curl -sf "http://127.0.0.1:$LANGFUSE_PORT/api/public/health" >/dev/null 2>&1; then
+      log "langfuse 已就绪"; break
+    fi
+    [ "$i" = 60 ] && warn "langfuse 120s 内未就绪，请检查 docker logs"
+    sleep 2
+  done
+else
+  warn "未找到 langfuse 目录 $LANGFUSE_DIR，跳过"
+fi
+
+# ---------- 6. 部署/重启 agents ----------
+if [ -d "$AGENTS_WORKSPACE" ]; then
+  log "安装 agents 依赖..."
+  cd "$AGENTS_WORKSPACE"
+  uv sync --frozen || die "agents 依赖安装失败"
+
+  log "重启 agents（端口 $AGENTS_PORT）..."
+  OLD_AGENTS_PID=$(ss -tlnp 2>/dev/null | grep ":$AGENTS_PORT " | grep -oP 'pid=\K[0-9]+' | head -1 || true)
+  if [ -n "$OLD_AGENTS_PID" ]; then
+    kill "$OLD_AGENTS_PID" || true
+    for i in $(seq 1 30); do
+      ss -tlnp 2>/dev/null | grep -q ":$AGENTS_PORT " || break
+      sleep 1
+    done
+  fi
+
+  mkdir -p "$OA_DEPLOY/logs"
+  nohup env PYTHONPATH=src uv run python -m uvicorn main:app --host 127.0.0.1 --port "$AGENTS_PORT" > "$OA_DEPLOY/logs/agents.log" 2>&1 &
+
+  log "等待 agents 就绪..."
+  for i in $(seq 1 30); do
+    if curl -sf "http://127.0.0.1:$AGENTS_PORT/health" >/dev/null 2>&1; then
+      log "agents 已就绪"; break
+    fi
+    [ "$i" = 30 ] && warn "agents 30s 内未就绪，请检查 $OA_DEPLOY/logs/agents.log"
+    sleep 1
+  done
+else
+  warn "未找到 agents 目录 $AGENTS_WORKSPACE，跳过"
+fi
+
+# ---------- 7. 停止旧后端 ----------
 OLD_PID=$(ss -tlnp 2>/dev/null | grep ":$BACKEND_PORT " | grep -oP 'pid=\K[0-9]+' | head -1 || true)
 if [ -n "$OLD_PID" ]; then
   log "停止旧后端进程 $OLD_PID..."
@@ -57,7 +119,7 @@ if [ -n "$OLD_PID" ]; then
   done
 fi
 
-# ---------- 6. 部署产物 ----------
+# ---------- 8. 部署产物 ----------
 log "替换后端 jar..."
 cp "$OA_WORKSPACE/ruoyi-6x/ruoyi-admin/target/ruoyi-admin.jar" "$OA_DEPLOY/backend/ruoyi-admin.jar"
 
@@ -65,26 +127,15 @@ log "替换前端 dist..."
 rm -rf "$OA_DEPLOY/dist"
 cp -r "$OA_WORKSPACE/plus-ui-6x/dist" "$OA_DEPLOY/dist"
 
-# nginx worker 以 www-data 运行，必须确保能读取 dist 及上层目录
 log "设置 dist 权限..."
 chmod 755 "$HOME" "$HOME/jvkit" "$OA_DEPLOY" "$OA_DEPLOY/dist"
 chmod -R 755 "$OA_DEPLOY/dist"
 
-# ---------- 7. 启动后端 ----------
+# ---------- 9. 启动后端 ----------
 log "启动后端（端口 $BACKEND_PORT）..."
 mkdir -p "$(dirname "$BACKEND_LOG")"
-nohup java -jar "$OA_DEPLOY/backend/ruoyi-admin.jar" \
-  --server.port=$BACKEND_PORT \
-  --spring.profiles.active=prod \
-  --spring.datasource.dynamic.datasource.master.url="jdbc:mysql://127.0.0.1:3306/ry-vue-6x?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&serverTimezone=GMT%2B8&autoReconnect=true&rewriteBatchedStatements=true&allowPublicKeyRetrieval=true&nullCatalogMeansCurrent=true" \
-  --spring.datasource.dynamic.datasource.master.username=root \
-  --spring.datasource.dynamic.datasource.master.password=ruoyi123 \
-  --spring.data.redis.host=127.0.0.1 \
-  --spring.data.redis.password=ruoyi123 \
-  --spring.data.redis.port=6379 \
-  > "$BACKEND_LOG" 2>&1 &
+nohup java -jar "$OA_DEPLOY/backend/ruoyi-admin.jar"   --server.port=$BACKEND_PORT   --spring.profiles.active=prod   --spring.datasource.dynamic.datasource.master.url="jdbc:mysql://127.0.0.1:3306/ry-vue-6x?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&serverTimezone=GMT%2B8&autoReconnect=true&rewriteBatchedStatements=true&allowPublicKeyRetrieval=true&nullCatalogMeansCurrent=true"   --spring.datasource.dynamic.datasource.master.username=root   --spring.datasource.dynamic.datasource.master.password=ruoyi123   --spring.data.redis.host=127.0.0.1   --spring.data.redis.password=ruoyi123   --spring.data.redis.port=6379   > "$BACKEND_LOG" 2>&1 &
 
-# 等待后端就绪
 log "等待后端就绪..."
 for i in $(seq 1 60); do
   if curl -sf "http://127.0.0.1:$BACKEND_PORT/" >/dev/null 2>&1; then
@@ -95,9 +146,7 @@ for i in $(seq 1 60); do
   sleep 1
 done
 
-# ---------- 8. 重载 nginx ----------
-# 仅当 nginx 配置实际变化或首次部署时才需要 reload；
-# liyang 用户默认没有 passwordless sudo，因此这里先尝试，失败则给出提示。
+# ---------- 10. 重载 nginx ----------
 log "尝试重载 nginx..."
 if sudo nginx -t >/dev/null 2>&1 && sudo nginx -s reload >/dev/null 2>&1; then
   log "nginx 已重载"
@@ -105,7 +154,7 @@ else
   warn "nginx 重载失败（可能是没有 sudo 权限）。若修改了 nginx 配置，请手动执行：sudo nginx -s reload"
 fi
 
-# ---------- 9. 冒烟验证 ----------
+# ---------- 11. 冒烟验证 ----------
 log "冒烟验证..."
 HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$BACKEND_PORT/")
 [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "404" ] || die "后端健康检查失败: $HTTP_CODE"
@@ -113,5 +162,13 @@ HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$BACKEND_PO
 HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://172.16.16.110/oa/")
 [ "$HTTP_CODE" = "200" ] || die "前端访问失败: $HTTP_CODE"
 
+if curl -sf "http://127.0.0.1:$AGENTS_PORT/health" >/dev/null 2>&1; then
+  log "agents 健康检查通过"
+else
+  warn "agents 健康检查未通过"
+fi
+
 log "部署完成: http://172.16.16.110/oa"
 log "后端日志: $BACKEND_LOG"
+log "agents 日志: $OA_DEPLOY/logs/agents.log"
+log "langfuse UI: http://172.16.16.110:$LANGFUSE_PORT"
