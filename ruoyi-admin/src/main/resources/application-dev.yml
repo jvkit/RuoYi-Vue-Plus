@@ -327,3 +327,8 @@ dify:
   api-url: http://172.16.16.110:8090
   app-id: fc04cb5d-0d6c-42b1-8dfd-7c6755827d2d
   api-key: app-22cb3e89ff524629af078ee3af77ac08
+
+--- # agents 智能体服务（发票识别/匹配等）
+agents:
+  # 本地开发地址；服务器部署改为内网可达的 agents 服务地址
+  invoice-match-url: http://127.0.0.1:8093/invoice/match

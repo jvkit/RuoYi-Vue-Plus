@@ -1,6 +1,8 @@
 package org.dromara.procurement.controller;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
+import cn.hutool.json.JSONObject;
+import cn.hutool.json.JSONUtil;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -19,9 +21,11 @@ import org.dromara.common.redis.annotation.RepeatSubmit;
 import org.dromara.common.web.core.BaseController;
 import org.dromara.procurement.domain.bo.PmsAcceptanceBo;
 import org.dromara.procurement.domain.vo.PmsAcceptanceVo;
+import org.dromara.procurement.service.AgentsInvoiceMatchService;
 import org.dromara.procurement.service.IPmsAcceptanceService;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Arrays;
 import java.util.List;
@@ -39,6 +43,7 @@ import java.util.concurrent.TimeUnit;
 public class PmsAcceptanceController extends BaseController {
 
     private final IPmsAcceptanceService acceptanceService;
+    private final AgentsInvoiceMatchService agentsInvoiceMatchService;
 
     /**
      * 查询采购验收单分页列表
@@ -113,5 +118,20 @@ public class PmsAcceptanceController extends BaseController {
     public R<Void> remove(@NotEmpty(message = "主键不能为空")
                           @PathVariable Long[] ids) {
         return toAjax(acceptanceService.deleteWithValidByIds(Arrays.asList(ids), true));
+    }
+
+    /**
+     * 发票批量识别 + 匹配（调用 agents 智能体服务）
+     *
+     * @param items 验收明细 JSON 数组（含 itemName/spec/applyPrice/quantity/id）
+     * @param files 发票 PDF 文件（可多个）
+     * @return agents 返回的匹配报告
+     */
+    @SaCheckPermission("procurement:acceptance:add")
+    @PostMapping("/ai-invoice-match")
+    public R<JSONObject> aiInvoiceMatch(@RequestParam("items") String items,
+                                        @RequestParam("files") List<MultipartFile> files) {
+        List<Object> itemList = JSONUtil.parseArray(items);
+        return R.ok(agentsInvoiceMatchService.matchInvoices(itemList, files));
     }
 }

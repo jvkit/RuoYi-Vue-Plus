@@ -323,3 +323,8 @@ justauth:
       client-id: 10**********6
       client-secret: 1f7d08**********5b7**********29e
       redirect-uri: ${justauth.address}/social-callback?source=gitea
+
+--- # agents 智能体服务（发票识别/匹配等）
+agents:
+  # 服务器部署改为内网可达的 agents 服务地址
+  invoice-match-url: http://127.0.0.1:8093/invoice/match
