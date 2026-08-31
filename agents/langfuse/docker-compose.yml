@@ -48,7 +48,7 @@ services:
     restart: always
     depends_on: *deps
     ports:
-      - "3000:3000"
+      - "3030:3000"
     environment:
       <<: *env
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
