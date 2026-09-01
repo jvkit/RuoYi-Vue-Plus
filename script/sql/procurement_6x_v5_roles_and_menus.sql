@@ -41,8 +41,7 @@ WHERE role_id = @common_user_role_id
     1801131, 1801132, 1801133, -- 报销按钮
     1801140,  -- 资金
     1801141, 1801142, -- 资金按钮
-    1761400000000000118,  -- OSS管理
-    1761400000000001600, 1761400000000001601, 1761400000000001602, 1761400000000001603, -- OSS按钮
+    -- OSS 管理菜单对普通用户隐藏，但上传/下载按钮权限需要保留，见下方 3.3
     1761400000000011622,  -- 流程分类管理
     1761400000000011623, 1761400000000011624, 1761400000000011625, 1761400000000011626, 1761400000000011627, -- 流程分类按钮
     1761400000000011631,  -- 所有待办（管理视角）
@@ -143,6 +142,12 @@ INSERT INTO sys_role_menu (role_id, menu_id) VALUES (@common_user_role_id, 17614
 -- 我的请求
 DELETE FROM sys_role_menu WHERE role_id = @common_user_role_id AND menu_id = 1761400000000011629;
 INSERT INTO sys_role_menu (role_id, menu_id) VALUES (@common_user_role_id, 1761400000000011629);
+
+-- OSS 上传/下载按钮权限（不显示 OSS 管理菜单，但需要上传发票/截图）
+DELETE FROM sys_role_menu WHERE role_id = @common_user_role_id AND menu_id = 1761400000000001601;
+INSERT INTO sys_role_menu (role_id, menu_id) VALUES (@common_user_role_id, 1761400000000001601);
+DELETE FROM sys_role_menu WHERE role_id = @common_user_role_id AND menu_id = 1761400000000001602;
+INSERT INTO sys_role_menu (role_id, menu_id) VALUES (@common_user_role_id, 1761400000000001602);
 
 -- 校验
 SELECT role_id, role_name, role_key FROM sys_role WHERE role_key IN ('team_leader', 'dept_leader');
