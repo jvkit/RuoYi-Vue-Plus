@@ -18,7 +18,9 @@ import org.dromara.common.log.annotation.Log;
 import org.dromara.common.log.enums.BusinessType;
 import org.dromara.common.mybatis.core.page.PageQuery;
 import org.dromara.common.redis.annotation.RepeatSubmit;
+import org.dromara.common.satoken.utils.LoginHelper;
 import org.dromara.common.web.core.BaseController;
+import org.dromara.procurement.domain.PmsAcceptance;
 import org.dromara.procurement.domain.bo.PmsAcceptanceBo;
 import org.dromara.procurement.domain.vo.PmsAcceptanceVo;
 import org.dromara.procurement.service.AgentsInvoiceMatchService;
@@ -95,6 +97,18 @@ public class PmsAcceptanceController extends BaseController {
     @RepeatSubmit
     @PutMapping()
     public R<Void> edit(@Validated(EditGroup.class) @RequestBody PmsAcceptanceBo bo) {
+        PmsAcceptance entity = acceptanceService.getById(bo.getId());
+        if (entity == null) {
+            return R.fail("采购验收单不存在");
+        }
+        // 未启动流程前可编辑，一旦提交审批不可修改
+        if (entity.getProcessInstanceId() != null) {
+            return R.fail("已提交审批的验收单不可编辑");
+        }
+        // 只能编辑自己的单据（管理员除外）
+        if (!LoginHelper.isAdmin() && !LoginHelper.getUserId().equals(entity.getCreateBy())) {
+            return R.fail("只能编辑自己的采购验收单");
+        }
         return toAjax(acceptanceService.updateByBo(bo));
     }
 
@@ -117,6 +131,20 @@ public class PmsAcceptanceController extends BaseController {
     @DeleteMapping("/{ids}")
     public R<Void> remove(@NotEmpty(message = "主键不能为空")
                           @PathVariable Long[] ids) {
+        for (Long id : ids) {
+            PmsAcceptance entity = acceptanceService.getById(id);
+            if (entity == null) {
+                continue;
+            }
+            // 未启动流程前可删除，一旦提交审批不可删除
+            if (entity.getProcessInstanceId() != null) {
+                return R.fail("已提交审批的验收单不可删除");
+            }
+            // 只能删除自己的单据（管理员除外）
+            if (!LoginHelper.isAdmin() && !LoginHelper.getUserId().equals(entity.getCreateBy())) {
+                return R.fail("只能删除自己的采购验收单");
+            }
+        }
         return toAjax(acceptanceService.deleteWithValidByIds(Arrays.asList(ids), true));
     }
 

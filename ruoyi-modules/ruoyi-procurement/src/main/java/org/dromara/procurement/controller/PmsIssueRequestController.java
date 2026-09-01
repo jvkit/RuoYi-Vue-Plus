@@ -16,7 +16,9 @@ import org.dromara.common.log.annotation.Log;
 import org.dromara.common.log.enums.BusinessType;
 import org.dromara.common.mybatis.core.page.PageQuery;
 import org.dromara.common.redis.annotation.RepeatSubmit;
+import org.dromara.common.satoken.utils.LoginHelper;
 import org.dromara.common.web.core.BaseController;
+import org.dromara.procurement.domain.PmsIssueRequest;
 import org.dromara.procurement.domain.bo.PmsIssueRequestBo;
 import org.dromara.procurement.domain.vo.PmsIssueRequestVo;
 import org.dromara.procurement.service.IPmsIssueRequestService;
@@ -90,6 +92,18 @@ public class PmsIssueRequestController extends BaseController {
     @RepeatSubmit
     @PutMapping()
     public R<Void> edit(@Validated(EditGroup.class) @RequestBody PmsIssueRequestBo bo) {
+        PmsIssueRequest entity = issueRequestService.getById(bo.getId());
+        if (entity == null) {
+            return R.fail("领用申请不存在");
+        }
+        // 未启动流程前可编辑，一旦提交审批不可修改
+        if (entity.getProcessInstanceId() != null) {
+            return R.fail("已提交审批的领用申请不可编辑");
+        }
+        // 只能编辑自己的单据（管理员除外）
+        if (!LoginHelper.isAdmin() && !LoginHelper.getUserId().equals(entity.getCreateBy())) {
+            return R.fail("只能编辑自己的领用申请");
+        }
         return toAjax(issueRequestService.updateByBo(bo));
     }
 
@@ -123,6 +137,20 @@ public class PmsIssueRequestController extends BaseController {
     @DeleteMapping("/{ids}")
     public R<Void> remove(@NotEmpty(message = "主键不能为空")
                           @PathVariable Long[] ids) {
+        for (Long id : ids) {
+            PmsIssueRequest entity = issueRequestService.getById(id);
+            if (entity == null) {
+                continue;
+            }
+            // 未启动流程前可删除，一旦提交审批不可删除
+            if (entity.getProcessInstanceId() != null) {
+                return R.fail("已提交审批的领用申请不可删除");
+            }
+            // 只能删除自己的单据（管理员除外）
+            if (!LoginHelper.isAdmin() && !LoginHelper.getUserId().equals(entity.getCreateBy())) {
+                return R.fail("只能删除自己的领用申请");
+            }
+        }
         return toAjax(issueRequestService.deleteWithValidByIds(Arrays.asList(ids), true));
     }
 }

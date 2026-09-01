@@ -17,7 +17,9 @@ import org.dromara.common.log.annotation.Log;
 import org.dromara.common.log.enums.BusinessType;
 import org.dromara.common.mybatis.core.page.PageQuery;
 import org.dromara.common.core.domain.PageResult;
+import org.dromara.common.satoken.utils.LoginHelper;
 import org.dromara.common.web.core.BaseController;
+import org.dromara.procurement.domain.PmsProcurementRequest;
 import org.dromara.procurement.domain.bo.PmsProcurementRequestBo;
 import org.dromara.procurement.domain.vo.PmsProcurementRequestVo;
 import org.dromara.procurement.service.IPmsProcurementRequestService;
@@ -102,6 +104,18 @@ public class PmsProcurementRequestController extends BaseController {
     @RepeatSubmit
     @PutMapping()
     public R<Void> edit(@Validated(EditGroup.class) @RequestBody PmsProcurementRequestBo bo) {
+        PmsProcurementRequest entity = requestService.getById(bo.getId());
+        if (entity == null) {
+            return R.fail("采购申请不存在");
+        }
+        // 只有草稿状态可编辑
+        if (!"draft".equals(entity.getStatus())) {
+            return R.fail("非草稿状态不可编辑");
+        }
+        // 只能编辑自己的草稿（管理员除外）
+        if (!LoginHelper.isAdmin() && !LoginHelper.getUserId().equals(entity.getCreateBy())) {
+            return R.fail("只能编辑自己的采购申请");
+        }
         return toAjax(requestService.updateByBo(bo));
     }
 
@@ -113,6 +127,20 @@ public class PmsProcurementRequestController extends BaseController {
     @DeleteMapping("/{ids}")
     public R<Void> remove(@NotEmpty(message = "主键不能为空")
                           @PathVariable Long[] ids) {
+        for (Long id : ids) {
+            PmsProcurementRequest entity = requestService.getById(id);
+            if (entity == null) {
+                continue;
+            }
+            // 只有草稿状态可删除
+            if (!"draft".equals(entity.getStatus())) {
+                return R.fail("非草稿状态不可删除");
+            }
+            // 只能删除自己的草稿（管理员除外）
+            if (!LoginHelper.isAdmin() && !LoginHelper.getUserId().equals(entity.getCreateBy())) {
+                return R.fail("只能删除自己的采购申请");
+            }
+        }
         return toAjax(requestService.deleteWithValidByIds(Arrays.asList(ids), true));
     }
 
