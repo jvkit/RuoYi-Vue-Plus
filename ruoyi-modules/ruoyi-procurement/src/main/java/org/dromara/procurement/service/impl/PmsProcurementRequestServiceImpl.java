@@ -274,7 +274,7 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
         startProcess.setFlowCode("pms_request");
         Map<String, Object> variables = new HashMap<>();
         variables.put("leaderId", project.getLeaderId().toString());
-        // 申请总金额：流程条件分支 leader -> team_leader(<1000) / dept_leader(>=1000)
+        // 申请总金额：流程条件分支 ceo -> end(<1000) / supreme_decision_maker(>=1000)
         BigDecimal amount = ObjectUtil.isNull(request.getAmount()) ? BigDecimal.ZERO : request.getAmount();
         variables.put("amount", amount);
         startProcess.setVariables(variables);
