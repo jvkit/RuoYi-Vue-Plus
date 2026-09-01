@@ -63,6 +63,12 @@
             <groupId>org.dromara</groupId>
             <artifactId>ruoyi-api</artifactId>
         </dependency>
+
+        <!-- 系统模块：复用 OSS 上传、参数配置读取 -->
+        <dependency>
+            <groupId>org.dromara</groupId>
+            <artifactId>ruoyi-system</artifactId>
+        </dependency>
     </dependencies>
 
 </project>

@@ -113,7 +113,7 @@ public class PmsProcurementRequestController extends BaseController {
             return R.fail("非草稿状态不可编辑");
         }
         // 只能编辑自己的草稿（管理员除外）
-        if (!LoginHelper.isAdmin() && !LoginHelper.getUserId().equals(entity.getCreateBy())) {
+        if (!LoginHelper.isSuperAdmin() && !LoginHelper.getUserId().equals(entity.getCreateBy())) {
             return R.fail("只能编辑自己的采购申请");
         }
         return toAjax(requestService.updateByBo(bo));
@@ -137,7 +137,7 @@ public class PmsProcurementRequestController extends BaseController {
                 return R.fail("非草稿状态不可删除");
             }
             // 只能删除自己的草稿（管理员除外）
-            if (!LoginHelper.isAdmin() && !LoginHelper.getUserId().equals(entity.getCreateBy())) {
+            if (!LoginHelper.isSuperAdmin() && !LoginHelper.getUserId().equals(entity.getCreateBy())) {
                 return R.fail("只能删除自己的采购申请");
             }
         }

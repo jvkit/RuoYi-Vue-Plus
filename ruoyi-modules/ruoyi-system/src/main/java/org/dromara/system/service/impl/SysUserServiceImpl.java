@@ -55,6 +55,17 @@ public class SysUserServiceImpl implements ISysUserService, UserService {
     private final SysUserPostMapper userPostMapper;
 
     /**
+     * 判断用户是否拥有超级管理员角色（按用户ID或按角色）
+     */
+    private boolean isSuperAdminUser(Long userId) {
+        if (LoginHelper.isSuperAdmin(userId)) {
+            return true;
+        }
+        return roleMapper.selectRolesByUserId(userId).stream()
+            .anyMatch(SysRoleVo::isSuperAdmin);
+    }
+
+    /**
      * 分页查询用户列表。
      *
      * @param user      用户筛选条件
@@ -467,8 +478,8 @@ public class SysUserServiceImpl implements ISysUserService, UserService {
 
         List<Long> roleList = new ArrayList<>(Arrays.asList(roleIds));
 
-        // 非超级管理员，禁止包含超级管理员角色
-        if (!LoginHelper.isSuperAdmin(userId)) {
+        // 只有当前超管才能为别人分配超管角色
+        if (!isSuperAdminUser(LoginHelper.getUserId())) {
             roleList.remove(SystemConstants.SUPER_ADMIN_ROLE_ID);
         }
 

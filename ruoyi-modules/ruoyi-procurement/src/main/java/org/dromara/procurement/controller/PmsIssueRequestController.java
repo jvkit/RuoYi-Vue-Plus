@@ -101,7 +101,7 @@ public class PmsIssueRequestController extends BaseController {
             return R.fail("已提交审批的领用申请不可编辑");
         }
         // 只能编辑自己的单据（管理员除外）
-        if (!LoginHelper.isAdmin() && !LoginHelper.getUserId().equals(entity.getCreateBy())) {
+        if (!LoginHelper.isSuperAdmin() && !LoginHelper.getUserId().equals(entity.getCreateBy())) {
             return R.fail("只能编辑自己的领用申请");
         }
         return toAjax(issueRequestService.updateByBo(bo));
@@ -147,7 +147,7 @@ public class PmsIssueRequestController extends BaseController {
                 return R.fail("已提交审批的领用申请不可删除");
             }
             // 只能删除自己的单据（管理员除外）
-            if (!LoginHelper.isAdmin() && !LoginHelper.getUserId().equals(entity.getCreateBy())) {
+            if (!LoginHelper.isSuperAdmin() && !LoginHelper.getUserId().equals(entity.getCreateBy())) {
                 return R.fail("只能删除自己的领用申请");
             }
         }

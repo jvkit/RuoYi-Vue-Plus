@@ -37,6 +37,9 @@ import org.dromara.procurement.mapper.PmsFundFlowMapper;
 import org.dromara.procurement.mapper.PmsFlowApproverMapper;
 import org.dromara.procurement.service.IPmsProcurementRequestService;
 import org.dromara.procurement.utils.PmsPlatformUtil;
+import org.dromara.system.domain.SysUser;
+import org.dromara.system.mapper.SysUserMapper;
+import org.dromara.system.service.ISysConfigService;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -80,6 +83,8 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
     private final PmsFlowApproverMapper flowApproverMapper;
     private final PmsFundFlowMapper fundFlowMapper;
     private final WorkflowService workflowService;
+    private final ISysConfigService configService;
+    private final SysUserMapper userMapper;
 
     /**
      * 已导出的文件名集合（按天），用于导出 Excel 同名时追加三位序数
@@ -120,6 +125,11 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
             }
         }
         return vo;
+    }
+
+    @Override
+    public PmsProcurementRequest getById(Long id) {
+        return baseMapper.selectById(id);
     }
 
     @Override
@@ -498,7 +508,7 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
     }
 
     /**
-     * 导出采购申请表 Excel（按模板填充）
+     * 导出采购申请表 Excel（按最终模板填充）
      */
     @Override
     public void exportFormExcel(Long id, HttpServletResponse response) {
@@ -507,49 +517,100 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
             throw new ServiceException("采购申请不存在");
         }
         try {
-            ClassPathResource tpl = new ClassPathResource("templates/采购申请单模板.xlsx");
+            ClassPathResource tpl = new ClassPathResource("templates/最终模板.xlsx");
             try (Workbook wb = WorkbookFactory.create(tpl.getInputStream())) {
                 Sheet sheet = wb.getSheetAt(0);
-                // 申请人填 C3（合并区域左上角）
-                setCell(sheet, 2, 2, LoginHelper.getUsername());
-                // 清空模板示例/旧数据行（第8行起，索引7）
+
+                // 申请人：取采购单创建人姓名，无昵称则取用户名
+                SysUser applicantUser = userMapper.selectById(vo.getCreateBy());
+                String applicantName = applicantUser == null ? "" :
+                    StringUtils.isNotBlank(applicantUser.getNickName()) ? applicantUser.getNickName() : applicantUser.getUserName();
+
+                // A1 项目归属：全画幅结构光超分辨显微镜系统及其子项目保持模板原文字，其他填"长三角物理研究中心"
+                String projectBelong = "长三角物理研究中心";
+                Long projectId = vo.getProjectId();
+                if (projectId != null && isInSpecialProjectTree(projectId)) {
+                    Row row1 = sheet.getRow(0);
+                    if (row1 != null && row1.getCell(0) != null) {
+                        projectBelong = row1.getCell(0).getStringCellValue();
+                    }
+                }
+                setCell(sheet, 0, 0, projectBelong);
+                // A1 字体强制为黑色：theme=1 在 WPS 某些主题下会渲染成红色，显式指定 RGB 避免
+                Row a1Row = sheet.getRow(0);
+                if (a1Row != null && a1Row.getCell(0) != null) {
+                    org.apache.poi.ss.usermodel.Font blackFont = wb.createFont();
+                    blackFont.setFontName("仿宋");
+                    blackFont.setFontHeightInPoints((short) 18);
+                    blackFont.setBold(true);
+                    blackFont.setColor(org.apache.poi.ss.usermodel.IndexedColors.BLACK.getIndex());
+                    org.apache.poi.ss.usermodel.CellStyle a1Style = wb.createCellStyle();
+                    a1Style.cloneStyleFrom(a1Row.getCell(0).getCellStyle());
+                    a1Style.setFont(blackFont);
+                    a1Row.getCell(0).setCellStyle(a1Style);
+                }
+
+                // C3 申请人（合并区域 C3:D3 左上角）
+                setCell(sheet, 2, 2, applicantName);
+
+                // 清空模板示例/旧数据行（第8行起，索引7）：逐单元格清空内容与超链接
                 int start = 7;
                 int lastRow = sheet.getLastRowNum();
                 for (int r = start; r <= lastRow; r++) {
                     Row row = sheet.getRow(r);
                     if (row != null) {
-                        sheet.removeRow(row);
+                        for (int c = row.getFirstCellNum(); c < row.getLastCellNum(); c++) {
+                            org.apache.poi.ss.usermodel.Cell cell = row.getCell(c);
+                            if (cell != null) {
+                                cell.setCellValue("");
+                                cell.setHyperlink(null);
+                            }
+                        }
                     }
                 }
-                // 写明细（对齐真模板 Tabelle1 16 列）
+
+                // 写明细（从第8行开始，序号 1,2,3...）
                 List<PmsProcurementRequestItemVo> items = vo.getItems();
-                String username = LoginHelper.getUsername();
-                String projectName = vo.getProjectName();
                 if (CollUtil.isNotEmpty(items)) {
                     int rowIdx = start;
                     int seq = 1;
                     for (PmsProcurementRequestItemVo item : items) {
                         BigDecimal qty = ObjectUtil.isNull(item.getQuantity()) ? BigDecimal.ZERO : item.getQuantity();
                         BigDecimal price = ObjectUtil.isNull(item.getUnitPrice()) ? BigDecimal.ZERO : item.getUnitPrice();
-                        BigDecimal amount = ObjectUtil.isNull(item.getAmount()) ? qty.multiply(price) : item.getAmount();
-                        setCell(sheet, rowIdx, 0, seq++);              // A 序号
-                        setCell(sheet, rowIdx, 1, item.getPurchaseType());   // B 采购种类
-                        setCell(sheet, rowIdx, 2, item.getCategory1());      // C 一级分类
-                        setCell(sheet, rowIdx, 3, item.getCategory2());      // D 二级分类
-                        setCell(sheet, rowIdx, 4, item.getProjectBelong());  // E 项目归属
-                        setCell(sheet, rowIdx, 5, item.getItemName()); // F 品名
-                        setCell(sheet, rowIdx, 6, item.getUnit());     // G 单位
-                        setCell(sheet, rowIdx, 7, qty.doubleValue());  // H 数量
-                        setCell(sheet, rowIdx, 8, item.getSpec());     // I 规格型号
-                        setCell(sheet, rowIdx, 9, item.getBrand());    // J 参考品牌
-                        setCell(sheet, rowIdx, 10, price.doubleValue());   // K 单价
-                        setCell(sheet, rowIdx, 11, amount.doubleValue()); // L 预估总价
-                        setCell(sheet, rowIdx, 13, username);          // N 保管人
-                        setCell(sheet, rowIdx, 14, username);          // O 使用人
-                        setCell(sheet, rowIdx, 15, vo.getApplyReason()); // P 采购理由
+                        BigDecimal baseAmount = qty.multiply(price);
+                        // 预估总价：<100 则 +10，>=100 则 *1.3
+                        BigDecimal estimatedAmount;
+                        if (baseAmount.compareTo(BigDecimal.valueOf(100)) < 0) {
+                            estimatedAmount = baseAmount.add(BigDecimal.valueOf(10));
+                        } else {
+                            estimatedAmount = baseAmount.multiply(BigDecimal.valueOf(1.3));
+                        }
+                        estimatedAmount = estimatedAmount.setScale(2, java.math.RoundingMode.HALF_UP);
+
+                        setCell(sheet, rowIdx, 0, seq++);                           // A 序号
+                        setCell(sheet, rowIdx, 1, item.getPurchaseType());          // B 采购种类
+                        setCell(sheet, rowIdx, 2, item.getCategory1());             // C 一级分类
+                        setCell(sheet, rowIdx, 3, item.getCategory2());             // D 二级分类
+                        setCell(sheet, rowIdx, 4, projectBelong);                   // E 项目归属
+                        setCell(sheet, rowIdx, 5, item.getItemName());              // F 品名
+                        setCell(sheet, rowIdx, 6, item.getUnit());                  // G 单位
+                        setCell(sheet, rowIdx, 7, qty.doubleValue());               // H 数量
+                        setCell(sheet, rowIdx, 8, item.getSpec());                  // I 规格型号/技术要求
+                        setCell(sheet, rowIdx, 9, item.getBrand());                 // J 参考品牌
+                        // K 实际单价、L 实际总价 不填
+                        setCell(sheet, rowIdx, 12, estimatedAmount.doubleValue());  // M 预估总价
+                        setCell(sheet, rowIdx, 13, applicantName);                  // N 保管人
+                        setCell(sheet, rowIdx, 14, applicantName);                  // O 使用人
+                        setCell(sheet, rowIdx, 15, item.getMaterialUsage());        // P 物料用途
+                        // Q 采购理由：优先明细级采购原因，空则回退申请级申请理由
+                        String rowReason = StringUtils.isNotBlank(item.getPurchaseReason())
+                            ? item.getPurchaseReason() : vo.getApplyReason();
+                        setCell(sheet, rowIdx, 16, rowReason);                      // Q 采购理由
+                        setHyperLink(sheet, rowIdx, 17, item.getLink());            // R 采购链接
                         rowIdx++;
                     }
                 }
+
                 response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
                 String title = StringUtils.isNotBlank(vo.getTitle()) ? vo.getTitle() : vo.getRequestCode();
                 // 文件名 = 标题 + .xlsx，同名时追加三位序数避免重复
@@ -565,6 +626,29 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
             log.error("导出采购申请表失败", e);
             throw new ServiceException("导出采购申请表失败：" + e.getMessage());
         }
+    }
+
+    /**
+     * 判断项目是否属于"全画幅结构光超分辨显微镜系统"及其子项目树
+     */
+    private boolean isInSpecialProjectTree(Long projectId) {
+        if (projectId == null) {
+            return false;
+        }
+        Long currentId = projectId;
+        int depth = 0;
+        while (currentId != null && depth < 50) {
+            PmsProject project = projectMapper.selectById(currentId);
+            if (project == null) {
+                return false;
+            }
+            if ("全画幅结构光超分辨显微镜系统".equals(project.getProjectName())) {
+                return true;
+            }
+            currentId = project.getParentId();
+            depth++;
+        }
+        return false;
     }
 
     /**
@@ -608,6 +692,34 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
         } else {
             cell.setCellValue(String.valueOf(value));
         }
+    }
+
+    /**
+     * 设置单元格超链接（URL 为空时清空）
+     */
+    private void setHyperLink(Sheet sheet, int rowIdx, int colIdx, String url) {
+        Row row = sheet.getRow(rowIdx);
+        if (row == null) {
+            row = sheet.createRow(rowIdx);
+        }
+        org.apache.poi.ss.usermodel.Cell cell = row.getCell(colIdx);
+        if (cell == null) {
+            cell = row.createCell(colIdx);
+        }
+        if (StringUtils.isBlank(url)) {
+            cell.setCellValue("");
+            cell.setHyperlink(null);
+            return;
+        }
+        String safeUrl = url.trim();
+        if (!safeUrl.startsWith("http://") && !safeUrl.startsWith("https://") && !safeUrl.startsWith("file://")) {
+            safeUrl = "https://" + safeUrl;
+        }
+        cell.setCellValue(safeUrl);
+        org.apache.poi.ss.usermodel.Hyperlink link = sheet.getWorkbook().getCreationHelper().createHyperlink(org.apache.poi.common.usermodel.HyperlinkType.URL);
+        link.setAddress(safeUrl);
+        link.setLabel(safeUrl);
+        cell.setHyperlink(link);
     }
 
 }

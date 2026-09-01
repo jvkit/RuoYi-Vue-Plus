@@ -166,7 +166,6 @@ public class FlwInstanceController extends BaseController {
      * @return 流程图与历史节点信息
      */
     @GetMapping("/flowHisTaskList/{businessId}")
-    @SaCheckPermission("workflow:instance:query")
     public R<Map<String, Object>> flowHisTaskList(@PathVariable String businessId) {
         return R.ok(flwInstanceService.flowHisTaskList(businessId));
     }

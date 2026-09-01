@@ -102,6 +102,16 @@ public class PmsProcurementRequestItemBo extends BaseEntity {
     private Integer sortNo;
 
     /**
+     * 物料用途
+     */
+    private String materialUsage;
+
+    /**
+     * 采购原因（明细级，对应导出Excel的"采购理由"列）
+     */
+    private String purchaseReason;
+
+    /**
      * 商品链接
      */
     private String link;

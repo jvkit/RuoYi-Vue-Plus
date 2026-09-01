@@ -23,8 +23,8 @@ import org.dromara.common.web.core.BaseController;
 import org.dromara.procurement.domain.PmsAcceptance;
 import org.dromara.procurement.domain.bo.PmsAcceptanceBo;
 import org.dromara.procurement.domain.vo.PmsAcceptanceVo;
-import org.dromara.procurement.service.AgentsInvoiceMatchService;
 import org.dromara.procurement.service.IPmsAcceptanceService;
+import org.dromara.procurement.service.PmsAcceptanceInvoiceService;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -45,7 +45,7 @@ import java.util.concurrent.TimeUnit;
 public class PmsAcceptanceController extends BaseController {
 
     private final IPmsAcceptanceService acceptanceService;
-    private final AgentsInvoiceMatchService agentsInvoiceMatchService;
+    private final PmsAcceptanceInvoiceService acceptanceInvoiceService;
 
     /**
      * 查询采购验收单分页列表
@@ -106,7 +106,7 @@ public class PmsAcceptanceController extends BaseController {
             return R.fail("已提交审批的验收单不可编辑");
         }
         // 只能编辑自己的单据（管理员除外）
-        if (!LoginHelper.isAdmin() && !LoginHelper.getUserId().equals(entity.getCreateBy())) {
+        if (!LoginHelper.isSuperAdmin() && !LoginHelper.getUserId().equals(entity.getCreateBy())) {
             return R.fail("只能编辑自己的采购验收单");
         }
         return toAjax(acceptanceService.updateByBo(bo));
@@ -141,7 +141,7 @@ public class PmsAcceptanceController extends BaseController {
                 return R.fail("已提交审批的验收单不可删除");
             }
             // 只能删除自己的单据（管理员除外）
-            if (!LoginHelper.isAdmin() && !LoginHelper.getUserId().equals(entity.getCreateBy())) {
+            if (!LoginHelper.isSuperAdmin() && !LoginHelper.getUserId().equals(entity.getCreateBy())) {
                 return R.fail("只能删除自己的采购验收单");
             }
         }
@@ -149,17 +149,19 @@ public class PmsAcceptanceController extends BaseController {
     }
 
     /**
-     * 发票批量识别 + 匹配（调用 agents 智能体服务）
+     * 发票批量识别 + 匹配 + 持久化（调用 agents 智能体服务）。
      *
-     * @param items 验收明细 JSON 数组（含 itemName/spec/applyPrice/quantity/id）
-     * @param files 发票 PDF 文件（可多个）
-     * @return agents 返回的匹配报告
+     * @param acceptanceId 验收单 ID（编辑草稿时传入，新增草稿可为空）
+     * @param items        验收明细 JSON 数组（含 itemName/spec/applyPrice/quantity/id）
+     * @param files        发票 PDF 文件（可多个）
+     * @return 匹配报告（含 ossId / invoiceId / invalidReason）
      */
     @SaCheckPermission("procurement:acceptance:add")
     @PostMapping("/ai-invoice-match")
-    public R<JSONObject> aiInvoiceMatch(@RequestParam("items") String items,
+    public R<JSONObject> aiInvoiceMatch(@RequestParam(value = "acceptanceId", required = false) Long acceptanceId,
+                                        @RequestParam("items") String items,
                                         @RequestParam("files") List<MultipartFile> files) {
         List<Object> itemList = JSONUtil.parseArray(items);
-        return R.ok(agentsInvoiceMatchService.matchInvoices(itemList, files));
+        return R.ok(acceptanceInvoiceService.matchAndPersist(acceptanceId, itemList, files));
     }
 }

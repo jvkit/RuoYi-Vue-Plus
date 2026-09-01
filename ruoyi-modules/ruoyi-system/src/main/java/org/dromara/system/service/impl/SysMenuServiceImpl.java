@@ -18,6 +18,7 @@ import org.dromara.system.domain.bo.SysMenuBo;
 import org.dromara.system.domain.vo.MetaVo;
 import org.dromara.system.domain.vo.RouterVo;
 import org.dromara.system.domain.vo.SysMenuVo;
+import org.dromara.system.domain.vo.SysRoleVo;
 import org.dromara.system.mapper.SysMenuMapper;
 import org.dromara.system.mapper.SysRoleMapper;
 import org.dromara.system.mapper.SysRoleMenuMapper;
@@ -42,6 +43,17 @@ public class SysMenuServiceImpl implements ISysMenuService {
     private final SysRoleMenuMapper roleMenuMapper;
 
     /**
+     * 判断用户是否为超级管理员（按用户ID或按角色）
+     */
+    private boolean isSuperAdminUser(Long userId) {
+        if (LoginHelper.isSuperAdmin(userId)) {
+            return true;
+        }
+        return roleMapper.selectRolesByUserId(userId).stream()
+            .anyMatch(SysRoleVo::isSuperAdmin);
+    }
+
+    /**
      * 根据用户查询系统菜单列表
      *
      * @param userId 用户ID
@@ -62,7 +74,7 @@ public class SysMenuServiceImpl implements ISysMenuService {
     @Override
     public List<SysMenuVo> selectMenuList(SysMenuBo menu, Long userId) {
         // 管理员显示所有菜单信息 不是管理员 按用户id过滤菜单
-        if (LoginHelper.isSuperAdmin(userId)) {
+        if (isSuperAdminUser(userId)) {
             return menuMapper.lambda()
                 .likeIfText(SysMenu::getMenuName, menu.getMenuName())
                 .eqIfText(SysMenu::getVisible, menu.getVisible())
@@ -118,7 +130,7 @@ public class SysMenuServiceImpl implements ISysMenuService {
     @Override
     public List<SysMenu> selectMenuTreeByUserId(Long userId) {
         List<SysMenu> menus;
-        if (LoginHelper.isSuperAdmin(userId)) {
+        if (isSuperAdminUser(userId)) {
             menus = menuMapper.selectMenuTreeAll();
         } else {
             menus = menuMapper.selectMenuTreeByUserId(userId);

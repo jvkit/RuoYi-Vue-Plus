@@ -72,6 +72,11 @@ public class PmsIssueRequestServiceImpl implements IPmsIssueRequestService {
     }
 
     @Override
+    public PmsIssueRequest getById(Long id) {
+        return baseMapper.selectById(id);
+    }
+
+    @Override
     public PageResult<PmsIssueRequestVo> queryPageList(PmsIssueRequestBo bo, PageQuery pageQuery) {
         LambdaQueryWrapper<PmsIssueRequest> lqw = buildQueryWrapper(bo);
         Page<PmsIssueRequestVo> result = baseMapper.selectVoPage(pageQuery.build(), lqw);

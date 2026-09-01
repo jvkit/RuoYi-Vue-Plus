@@ -22,6 +22,11 @@ public interface IPmsAcceptanceService {
     PmsAcceptanceVo queryById(Long id);
 
     /**
+     * 根据 ID 取原始实体（用于状态校验）
+     */
+    PmsAcceptance getById(Long id);
+
+    /**
      * 查询采购验收单分页列表
      */
     PageResult<PmsAcceptanceVo> queryPageList(PmsAcceptanceBo bo, PageQuery pageQuery);

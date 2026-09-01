@@ -3,6 +3,7 @@ package org.dromara.procurement.service;
 import jakarta.servlet.http.HttpServletResponse;
 import org.dromara.common.mybatis.core.page.PageQuery;
 import org.dromara.common.core.domain.PageResult;
+import org.dromara.procurement.domain.PmsProcurementRequest;
 import org.dromara.procurement.domain.bo.PmsProcurementRequestBo;
 import org.dromara.procurement.domain.vo.PmsProcurementRequestVo;
 
@@ -20,6 +21,11 @@ public interface IPmsProcurementRequestService {
      * 查询采购申请详情（含明细）
      */
     PmsProcurementRequestVo queryById(Long id);
+
+    /**
+     * 根据 ID 取原始实体（用于状态校验）
+     */
+    PmsProcurementRequest getById(Long id);
 
     /**
      * 查询采购申请分页列表

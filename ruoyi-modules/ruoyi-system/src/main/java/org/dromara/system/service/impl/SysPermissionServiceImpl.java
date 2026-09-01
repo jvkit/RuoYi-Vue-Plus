@@ -7,6 +7,7 @@ import org.dromara.common.core.service.PermissionService;
 import org.dromara.common.core.utils.StreamUtils;
 import org.dromara.common.satoken.utils.LoginHelper;
 import org.dromara.system.api.domain.RoleDTO;
+import org.dromara.system.domain.vo.SysRoleVo;
 import org.dromara.system.service.ISysMenuService;
 import org.dromara.system.service.ISysPermissionService;
 import org.dromara.system.service.ISysRoleService;
@@ -27,6 +28,17 @@ public class SysPermissionServiceImpl implements ISysPermissionService, Permissi
     private final ISysMenuService menuService;
 
     /**
+     * 判断用户是否为超级管理员（按用户ID或按角色）
+     */
+    private boolean isSuperAdminUser(Long userId) {
+        if (LoginHelper.isSuperAdmin(userId)) {
+            return true;
+        }
+        return roleService.selectRolesByUserId(userId).stream()
+            .anyMatch(SysRoleVo::isSuperAdmin);
+    }
+
+    /**
      * 获取角色数据权限
      *
      * @param userId 用户id
@@ -36,7 +48,7 @@ public class SysPermissionServiceImpl implements ISysPermissionService, Permissi
     public Set<String> getRolePermission(Long userId) {
         Set<String> roles = new HashSet<>();
         // 管理员拥有所有权限
-        if (LoginHelper.isSuperAdmin(userId)) {
+        if (isSuperAdminUser(userId)) {
             roles.add(SystemConstants.SUPER_ADMIN_ROLE_KEY);
         } else {
             roles.addAll(roleService.selectRolePermissionByUserId(userId));
@@ -54,7 +66,7 @@ public class SysPermissionServiceImpl implements ISysPermissionService, Permissi
     public Set<String> getMenuPermission(Long userId) {
         Set<String> perms = new HashSet<>();
         // 管理员拥有所有权限
-        if (LoginHelper.isSuperAdmin(userId)) {
+        if (isSuperAdminUser(userId)) {
             perms.add("*:*:*");
         } else {
             perms.addAll(menuService.selectMenuPermsByUserId(userId));

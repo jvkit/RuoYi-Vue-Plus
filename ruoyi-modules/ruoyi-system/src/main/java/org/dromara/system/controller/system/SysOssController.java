@@ -54,11 +54,13 @@ public class SysOssController extends BaseController {
 
     /**
      * 查询OSS对象基于id串
+     * <p>
+     * 业务审批场景中审批人需要查看申请人上传的附件（付款截图、报价单、发票等），
+     * 为避免为每种角色重复分配 OSS 查询权限，此处取消按钮级权限校验，仍保留登录校验。
      *
      * @param ossIds OSS对象ID串
      * @return OSS 对象列表
      */
-    @SaCheckPermission("system:oss:query")
     @GetMapping("/listByIds/{ossIds}")
     public R<List<SysOssVo>> listByIds(@NotEmpty(message = "主键不能为空")
                                        @PathVariable Long[] ossIds) {
@@ -83,11 +85,12 @@ public class SysOssController extends BaseController {
 
     /**
      * 下载OSS对象
+     * <p>
+     * 与 listByIds 保持一致：取消按钮级权限校验，保留登录校验，方便审批人下载附件。
      *
      * @param ossId OSS对象ID
      * @throws IOException IO 异常
      */
-    @SaCheckPermission("system:oss:download")
     @GetMapping("/download/{ossId}")
     public ResponseEntity<byte[]> download(@PathVariable Long ossId) throws IOException {
         return ossService.download(ossId);

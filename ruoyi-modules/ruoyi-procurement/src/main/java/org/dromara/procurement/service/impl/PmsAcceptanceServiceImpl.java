@@ -106,6 +106,11 @@ public class PmsAcceptanceServiceImpl implements IPmsAcceptanceService {
         return vo;
     }
 
+    @Override
+    public PmsAcceptance getById(Long id) {
+        return baseMapper.selectById(id);
+    }
+
     /**
      * 带出关联采购申请的编号与项目名称
      */

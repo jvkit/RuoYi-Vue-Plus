@@ -38,6 +38,11 @@ public class PmsProcurementRequestVo implements Serializable {
     private String requestCode;
 
     /**
+     * 创建人ID
+     */
+    private Long createBy;
+
+    /**
      * 申请标题
      */
     @ExcelProperty(value = "申请标题")

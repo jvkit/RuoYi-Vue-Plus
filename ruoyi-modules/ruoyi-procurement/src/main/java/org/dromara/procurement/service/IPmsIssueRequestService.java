@@ -22,6 +22,11 @@ public interface IPmsIssueRequestService {
     PmsIssueRequestVo queryById(Long id);
 
     /**
+     * 根据 ID 取原始实体（用于状态校验）
+     */
+    PmsIssueRequest getById(Long id);
+
+    /**
      * 查询领用申请分页列表
      */
     PageResult<PmsIssueRequestVo> queryPageList(PmsIssueRequestBo bo, PageQuery pageQuery);
