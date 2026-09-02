@@ -38,9 +38,10 @@ fi
 # 已执行过的文件名集合（按整行匹配）
 mapfile -t APPLIED < "$APPLIED_LOG"
 
-# 按文件名排序执行
+# 按文件名排序执行（使用 version sort，避免 v10/v11/v12 排在 v2~v9 之前）
 RUN_COUNT=0
-for sql_file in "$SCRIPT_DIR"/*.sql; do
+mapfile -t SQL_FILES < <(ls -1 "$SCRIPT_DIR"/*.sql 2>/dev/null | sort -V)
+for sql_file in "${SQL_FILES[@]}"; do
   [ -f "$sql_file" ] || continue
   filename=$(basename "$sql_file")
 
