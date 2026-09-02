@@ -1,5 +1,6 @@
 package org.dromara.procurement.service;
 
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.convert.Convert;
 import cn.hutool.core.date.DateUtil;
 import cn.hutool.json.JSONArray;
@@ -214,6 +215,20 @@ public class PmsAcceptanceInvoiceService {
                 }
             }
             invoice.setOcrJson(extracted.toString());
+        }
+
+        // 匹配到的商品名落库（台账展示用）
+        JSONArray nameArr = result.getJSONArray("matchedItemNames");
+        if (nameArr != null && !nameArr.isEmpty()) {
+            List<String> matchedNames = new ArrayList<>();
+            for (Object o : nameArr) {
+                if (o != null && StringUtils.isNotBlank(o.toString())) {
+                    matchedNames.add(o.toString());
+                }
+            }
+            if (CollUtil.isNotEmpty(matchedNames)) {
+                invoice.setMatchedItems(String.join(",", matchedNames));
+            }
         }
 
         String matchStatus = result.getStr("matchStatus");

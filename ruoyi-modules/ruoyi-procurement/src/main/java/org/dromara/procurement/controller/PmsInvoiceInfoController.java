@@ -7,6 +7,7 @@ import org.dromara.common.mybatis.core.page.PageQuery;
 import org.dromara.common.core.domain.PageResult;
 import org.dromara.common.web.core.BaseController;
 import org.dromara.procurement.domain.PmsInvoiceInfo;
+import org.dromara.procurement.domain.vo.PmsInvoiceInfoViewVo;
 import org.dromara.procurement.service.IPmsInvoiceInfoService;
 import org.springframework.web.bind.annotation.*;
 
@@ -25,17 +26,17 @@ public class PmsInvoiceInfoController extends BaseController {
     private final IPmsInvoiceInfoService invoiceInfoService;
 
     /**
-     * 查询采购发票台账列表
+     * 查询采购发票台账列表（补充项目名/申请标题/验收单号）
      */
     @SaCheckPermission("procurement:invoice:list")
     @GetMapping("/list")
-    public R<PageResult<PmsInvoiceInfo>> list(PmsInvoiceInfo query, PageQuery pageQuery) {
-        List<PmsInvoiceInfo> list = invoiceInfoService.listByCondition(query);
+    public R<PageResult<PmsInvoiceInfoViewVo>> list(PmsInvoiceInfo query, PageQuery pageQuery) {
+        List<PmsInvoiceInfoViewVo> list = invoiceInfoService.listViewByCondition(query);
         // 简单分页：先全查再手动分页（数据量不大时可用）
         int total = list.size();
         int from = (pageQuery.getPageNum() - 1) * pageQuery.getPageSize();
         int to = Math.min(from + pageQuery.getPageSize(), total);
-        List<PmsInvoiceInfo> rows = from < total ? list.subList(from, to) : List.of();
+        List<PmsInvoiceInfoViewVo> rows = from < total ? list.subList(from, to) : List.of();
         return R.ok(new PageResult<>(rows, (long) total));
     }
 

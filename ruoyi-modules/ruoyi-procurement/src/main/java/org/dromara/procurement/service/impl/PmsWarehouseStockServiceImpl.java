@@ -8,10 +8,12 @@ import org.dromara.common.core.domain.PageResult;
 import org.dromara.common.core.utils.MapstructUtils;
 import org.dromara.common.core.utils.StringUtils;
 import org.dromara.common.mybatis.core.page.PageQuery;
+import org.dromara.procurement.domain.PmsAcceptanceItem;
 import org.dromara.procurement.domain.PmsProject;
 import org.dromara.procurement.domain.PmsWarehouseStock;
 import org.dromara.procurement.domain.bo.PmsWarehouseStockBo;
 import org.dromara.procurement.domain.vo.PmsWarehouseStockVo;
+import org.dromara.procurement.mapper.PmsAcceptanceItemMapper;
 import org.dromara.procurement.mapper.PmsProjectMapper;
 import org.dromara.procurement.mapper.PmsWarehouseStockMapper;
 import org.dromara.procurement.service.IPmsWarehouseStockService;
@@ -34,6 +36,7 @@ public class PmsWarehouseStockServiceImpl implements IPmsWarehouseStockService {
 
     private final PmsWarehouseStockMapper baseMapper;
     private final PmsProjectMapper projectMapper;
+    private final PmsAcceptanceItemMapper acceptanceItemMapper;
 
     /**
      * 批量填充项目名称
@@ -70,6 +73,7 @@ public class PmsWarehouseStockServiceImpl implements IPmsWarehouseStockService {
         LambdaQueryWrapper<PmsWarehouseStock> lqw = buildQueryWrapper(bo);
         Page<PmsWarehouseStockVo> result = baseMapper.selectVoPage(pageQuery.build(), lqw);
         fillProjectName(result.getRecords());
+        fillAcceptancePhoto(result.getRecords());
         return PageResult.build(result.getRecords(), result.getTotal());
     }
 
@@ -77,7 +81,39 @@ public class PmsWarehouseStockServiceImpl implements IPmsWarehouseStockService {
     public List<PmsWarehouseStockVo> queryList(PmsWarehouseStockBo bo) {
         List<PmsWarehouseStockVo> list = baseMapper.selectVoList(buildQueryWrapper(bo));
         fillProjectName(list);
+        fillAcceptancePhoto(list);
         return list;
+    }
+
+    /**
+     * 批量填充验收图片（OSS ID）：库存来源明细 sourceItemId 对应的验收明细 photoUrl。
+     */
+    private void fillAcceptancePhoto(List<PmsWarehouseStockVo> list) {
+        if (list == null || list.isEmpty()) {
+            return;
+        }
+        List<Long> sourceItemIds = list.stream()
+            .map(PmsWarehouseStockVo::getSourceItemId)
+            .filter(java.util.Objects::nonNull)
+            .distinct()
+            .collect(Collectors.toList());
+        if (sourceItemIds.isEmpty()) {
+            return;
+        }
+        Map<Long, String> photoMap = acceptanceItemMapper.selectList(
+                Wrappers.<PmsAcceptanceItem>lambdaQuery()
+                    .in(PmsAcceptanceItem::getRequestItemId, sourceItemIds)
+                    .isNotNull(PmsAcceptanceItem::getPhotoUrl)
+                    .ne(PmsAcceptanceItem::getPhotoUrl, "")
+                    .orderByDesc(PmsAcceptanceItem::getId))
+            .stream()
+            .filter(item -> item.getPhotoUrl() != null && !item.getPhotoUrl().isEmpty())
+            .collect(Collectors.toMap(PmsAcceptanceItem::getRequestItemId, PmsAcceptanceItem::getPhotoUrl, (a, b) -> a));
+        for (PmsWarehouseStockVo vo : list) {
+            if (vo.getSourceItemId() != null) {
+                vo.setPhotoUrl(photoMap.get(vo.getSourceItemId()));
+            }
+        }
     }
 
     private LambdaQueryWrapper<PmsWarehouseStock> buildQueryWrapper(PmsWarehouseStockBo bo) {

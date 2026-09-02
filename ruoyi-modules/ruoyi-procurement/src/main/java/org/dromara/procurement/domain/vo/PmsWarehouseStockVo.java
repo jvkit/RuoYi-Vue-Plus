@@ -91,6 +91,11 @@ public class PmsWarehouseStockVo implements Serializable {
     private String remark;
 
     /**
+     * 验收图片 OSS ID（来自验收明细 photoUrl，回显用）
+     */
+    private String photoUrl;
+
+    /**
      * 创建时间
      */
     @ExcelProperty(value = "创建时间")

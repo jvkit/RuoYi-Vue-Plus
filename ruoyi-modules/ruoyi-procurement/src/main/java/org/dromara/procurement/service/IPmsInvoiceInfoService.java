@@ -1,6 +1,7 @@
 package org.dromara.procurement.service;
 
 import org.dromara.procurement.domain.PmsInvoiceInfo;
+import org.dromara.procurement.domain.vo.PmsInvoiceInfoViewVo;
 
 import java.util.Collection;
 import java.util.List;
@@ -36,4 +37,9 @@ public interface IPmsInvoiceInfoService {
      * 查询发票列表，支持按 validFlag 筛选
      */
     List<PmsInvoiceInfo> listByCondition(PmsInvoiceInfo query);
+
+    /**
+     * 查询发票台账展示列表（补充项目名/申请标题/验收单号）
+     */
+    List<PmsInvoiceInfoViewVo> listViewByCondition(PmsInvoiceInfo query);
 }

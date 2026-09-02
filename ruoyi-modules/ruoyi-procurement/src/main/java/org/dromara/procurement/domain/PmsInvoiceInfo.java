@@ -161,6 +161,11 @@ public class PmsInvoiceInfo extends BaseEntity {
     private String ocrJson;
 
     /**
+     * 匹配到的商品名（多个逗号分隔）
+     */
+    private String matchedItems;
+
+    /**
      * 删除标志（0存在 2删除）
      */
     @TableLogic
