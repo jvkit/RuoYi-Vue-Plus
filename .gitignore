@@ -9,8 +9,7 @@ target/
 *.jar.original
 META-INF/
 /tmp/
-ruoyi-api-docs.html
-ruoyi-api-docs.json
+temp/
 openwebui_knowledge_export.zip
 *.db
 *.db.bak*
@@ -38,3 +37,6 @@ logs/
 plus-ui-6x/
 ruoyi-6x/
 scripts/demo-video/
+
+# 外部文档仓库（本地离线查阅用，不进入版本控制）
+docs/外部文档/

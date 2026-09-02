@@ -1,0 +1,14 @@
+# Spring Boot 配置文件
+# YML 格式：缩进表示层级关系
+
+server:
+  port: 8080  # 应用启动端口
+
+spring:
+  application:
+    name: sp-demo  # 应用名称
+
+# 日志级别
+logging:
+  level:
+    cn.jvkit.spdemo: debug

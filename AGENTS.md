@@ -6,6 +6,22 @@
 
 阅读本文件的 AI 代理：下面的信息面向对本项目一无所知的读者，可按"总览 → 技术栈 → 目录 → 构建/运行 → 自定义模块 → Dify 集成 → 数据库 → 部署 → 脚本 → 文档 → 约定"的顺序理解。
 
+## 0. 项目级 Skills（优先使用）
+
+本仓库在 `.agents/skills/` 下维护了项目级 skill，**处理对应领域任务时必须先读对应 SKILL.md**：
+
+| Skill | 用途 |
+|---|---|
+| `oa-deploy` | 服务器部署（172.16.16.110/oa）：deploy.sh、SQL 增量、验证清单、踩坑。部署前必读其《服务器部署指南.md》 |
+| `oa-local-run` | 本地启停（start-6x.sh/stop-6x.sh）、编译打包、日志、端口/UFW 排查、API 冒烟 |
+| `oa-db` | 数据库连接（本地/服务器/VSCode 插件参数）、幂等 SQL 规范、菜单 ID 段位表、诊断 SQL |
+| `oa-menu-perms` | 菜单驱动路由机制、新页面三件套、「无权访问/404/菜单不对」排查、角色约定 |
+| `oa-workflow` | Warm-Flow 流程：条件分支必须网关节点、角色审批、流程改造步骤 |
+| `oa-test-e2e` | Playwright 全链路测试（项目在 ~/workspace/work_twst）：账号、代理坑、场景、截图检查要求 |
+| `oa-agents` | AI 智能体服务（agents/）：FastAPI+PydanticAI+Langfuse、发票识别链路、提示词与追踪 |
+
+skill 目录内附带的完整文档副本（如《服务器部署指南.md》）与 `docs/` 下原文同源，改动时**两处同步维护**。
+
 ---
 
 ## 1. 项目总览
