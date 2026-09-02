@@ -105,6 +105,11 @@ public class PmsAcceptanceVo implements Serializable {
     private String remark;
 
     /**
+     * AI 发票识别留痕（JSON 数组，按轮次追加）
+     */
+    private String aiDetail;
+
+    /**
      * 创建时间
      */
     @ExcelProperty(value = "创建时间")

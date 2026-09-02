@@ -70,6 +70,11 @@ public class PmsAcceptance extends BaseEntity {
     private String remark;
 
     /**
+     * AI 发票识别留痕（JSON 数组，按轮次追加）
+     */
+    private String aiDetail;
+
+    /**
      * 删除标志
      */
     @TableLogic

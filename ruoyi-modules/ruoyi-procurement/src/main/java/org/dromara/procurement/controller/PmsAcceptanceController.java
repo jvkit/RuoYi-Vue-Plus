@@ -152,6 +152,7 @@ public class PmsAcceptanceController extends BaseController {
      * 发票批量识别 + 匹配 + 持久化（调用 agents 智能体服务）。
      *
      * @param acceptanceId 验收单 ID（编辑草稿时传入，新增草稿可为空）
+     * @param requestId    关联采购申请 ID（acceptanceId 为空时用于补关联台账，可选）
      * @param items        验收明细 JSON 数组（含 itemName/spec/applyPrice/quantity/id）
      * @param files        发票 PDF 文件（可多个）
      * @return 匹配报告（含 ossId / invoiceId / invalidReason）
@@ -159,9 +160,10 @@ public class PmsAcceptanceController extends BaseController {
     @SaCheckPermission("procurement:acceptance:add")
     @PostMapping("/ai-invoice-match")
     public R<JSONObject> aiInvoiceMatch(@RequestParam(value = "acceptanceId", required = false) Long acceptanceId,
+                                        @RequestParam(value = "requestId", required = false) Long requestId,
                                         @RequestParam("items") String items,
                                         @RequestParam("files") List<MultipartFile> files) {
         List<Object> itemList = JSONUtil.parseArray(items);
-        return R.ok(acceptanceInvoiceService.matchAndPersist(acceptanceId, itemList, files));
+        return R.ok(acceptanceInvoiceService.matchAndPersist(acceptanceId, requestId, itemList, files));
     }
 }

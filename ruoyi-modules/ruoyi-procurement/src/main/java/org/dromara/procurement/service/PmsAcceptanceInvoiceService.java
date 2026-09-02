@@ -10,7 +10,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.dromara.common.core.utils.StringUtils;
 import org.dromara.procurement.domain.PmsAcceptance;
 import org.dromara.procurement.domain.PmsInvoiceInfo;
+import org.dromara.procurement.domain.PmsProcurementRequest;
 import org.dromara.procurement.mapper.PmsAcceptanceMapper;
+import org.dromara.procurement.mapper.PmsProcurementRequestMapper;
 import org.dromara.system.domain.SysOssExt;
 import org.dromara.system.domain.vo.SysOssVo;
 import org.dromara.system.service.ISysOssService;
@@ -40,17 +42,19 @@ public class PmsAcceptanceInvoiceService {
     private final IPmsInvoiceInfoService invoiceInfoService;
     private final ISysOssService sysOssService;
     private final PmsAcceptanceMapper acceptanceMapper;
+    private final PmsProcurementRequestMapper requestMapper;
 
     /**
      * AI 识别发票并持久化到发票台账。
      *
      * @param acceptanceId 验收单 ID（新增草稿时可能为空）
+     * @param requestId    关联采购申请 ID（acceptanceId 为空时用于补关联台账，可选）
      * @param items        验收明细 JSON 数组
      * @param files        发票 PDF 文件
      * @return 带 ossId/invoiceId/invalidReason 的识别报告
      */
     @Transactional(rollbackFor = Exception.class)
-    public JSONObject matchAndPersist(Long acceptanceId, List<Object> items, List<MultipartFile> files) {
+    public JSONObject matchAndPersist(Long acceptanceId, Long requestId, List<Object> items, List<MultipartFile> files) {
         if (files == null || files.isEmpty()) {
             throw new IllegalArgumentException("请先上传发票 PDF 文件");
         }
@@ -93,15 +97,27 @@ public class PmsAcceptanceInvoiceService {
         }
 
         // 4. 关联 acceptance / request / project
-        Long requestId = null;
-        Long projectId = null;
+        Long effRequestId = null;
+        Long effProjectId = null;
         if (acceptanceId != null) {
             PmsAcceptance acceptance = acceptanceMapper.selectById(acceptanceId);
             if (acceptance != null) {
-                requestId = acceptance.getRequestId();
-                projectId = acceptance.getProjectId();
+                effRequestId = acceptance.getRequestId();
+                effProjectId = acceptance.getProjectId();
             }
         }
+        // acceptanceId 为空（新增草稿未落库）时，用前端传的 requestId 兜底，保证台账关联不丢
+        if (effRequestId == null && requestId != null) {
+            effRequestId = requestId;
+        }
+        if (effRequestId != null) {
+            PmsProcurementRequest request = requestMapper.selectById(effRequestId);
+            if (request != null && effProjectId == null) {
+                effProjectId = request.getProjectId();
+            }
+        }
+        Long finalRequestId = effRequestId;
+        Long finalProjectId = effProjectId;
 
         // 5. 持久化发票信息并回填结果
         JSONArray results = agentsResult.getJSONArray("results");
@@ -110,7 +126,7 @@ public class PmsAcceptanceInvoiceService {
                 JSONObject result = results.getJSONObject(i);
                 String originalName = result.getStr("originalName");
                 InvoiceFile invFile = findByName(invoiceFiles, originalName);
-                PmsInvoiceInfo invoice = buildInvoiceInfo(result, acceptanceId, requestId, projectId, invFile);
+                PmsInvoiceInfo invoice = buildInvoiceInfo(result, acceptanceId, finalRequestId, finalProjectId, invFile);
 
                 // 重复检测：只与「有效」发票比较
                 if (Boolean.TRUE.equals(invoice.getValidFlag())) {

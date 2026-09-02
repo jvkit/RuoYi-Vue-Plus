@@ -75,6 +75,11 @@ public class PmsAcceptanceBo extends BaseEntity {
     private String remark;
 
     /**
+     * AI 发票识别留痕（JSON 数组，按轮次追加）
+     */
+    private String aiDetail;
+
+    /**
      * 验收明细列表
      */
     private List<PmsAcceptanceItemBo> items;
