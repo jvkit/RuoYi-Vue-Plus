@@ -80,3 +80,22 @@
 - **原因**：`procurement_role_menu_cleanup.sql` 中删除的是 `1761400000000011630`，但服务器上「流程定义」菜单 ID 可能不同；本地与服务器菜单 ID 不一致。
 - **影响**：普通用户可查看流程定义列表，虽不能编辑，但不符合「只保留我的任务」的预期。
 - **待处理**：核对服务器上「流程定义」的 menu_id，更新 cleanup SQL 幂等删除。
+
+## 11. Langfuse 已可用但默认无 Prompt/Trace（2026-09-02）
+
+- **现象**：用户打开服务器 Langfuse UI，看不到提示词和 trace。
+- **原因**：Langfuse 是全新部署，尚未创建 Prompt；agents 服务启动后也未有发票识别请求，所以无 trace。
+- **处理**：
+  - 已通过 API 创建 `invoice_extract` 提示词。
+  - 已触发一次 `/invoice/match` 测试调用，Trace 成功写入 Langfuse UI。
+- **验证**：访问 `http://172.16.16.110:3030/project/bcc58c89-fdb0-4ded-8e10-b0ef406bec5f/traces` 可见 `invoice.extract` trace。
+- **注意**：Langfuse UI 项目路径使用 UUID，不是 `oa-agents` slug。
+
+## 12. 服务器 MinIO 与 OA OSS 地址不匹配
+
+- **现象**：仓库库存验收图片显示通用图标，OSS URL 为 `http://127.0.0.1:9000/ruoyi/...`，浏览器无法访问。
+- **原因**：
+  - 服务器只有 Langfuse 自带 MinIO，端口 `9092`（容器内 9000）。
+  - OA 文件存储配置指向 `127.0.0.1:9000`，但服务器上没有为 OA 独立运行的 MinIO 容器。
+- **影响**：所有通过 OA 上传的图片/PDF，前端预览/显示失败。
+- **待处理**：选择方案并修复，见 `docs/账户与环境信息汇总.md` 第三节。
