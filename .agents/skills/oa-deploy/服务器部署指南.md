@@ -98,6 +98,9 @@ bash deploy.sh
 
 ### 手动启动后端
 
+> **前置（新装服务器只需一次）**：`application-prod.yml` 配置了 `spring.servlet.multipart.location: /ruoyi/server/temp`，
+> 必须先 `sudo mkdir -p /ruoyi/server/temp && sudo chmod -R 1777 /ruoyi`，否则一切文件上传报「联系管理员」（详见问题跟踪第 13 条）。
+
 ```bash
 su - liyang
 cd /home/liyang/jvkit/oa

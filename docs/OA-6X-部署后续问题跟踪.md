@@ -102,3 +102,11 @@
   - `sys_oss_config` minio 行 domain_url 设为 `172.16.16.110:9000`，存量 `sys_oss.url` 批量替换（幂等 SQL `procurement_6x_v13_minio_domain.sql`）。
   - **坑**：`sys_oss` 是 Redis hash 缓存（ossId→url），改库后必须 `DEL sys_oss` 并重启后端，否则继续返回旧地址。
 - **验证**：Playwright 冒烟仓库库存页，图片地址为 `172.16.16.110:9000` 且全部真实加载。
+
+## 13. 服务器上传文件 500：multipart 临时目录 `/ruoyi/server/temp` 不存在 ✅ 已解决（2026-09-03）
+
+- **现象**：admin 提交采购申请上传截图，提示「上传失败，请联系管理员」。
+- **原因**：`application-prod.yml` 配置 `spring.servlet.multipart.location: /ruoyi/server/temp`，Jetty 解析 multipart 时要创建该目录；服务器 liyang 用户无权在 `/` 下建目录 → `AccessDeniedException: /ruoyi` → 400 bad multipart。
+- **修复**：`sudo mkdir -p /ruoyi/server/temp && sudo chmod -R 1777 /ruoyi`（一次性，重启不丢）。本地开发用 dev profile 无此配置，故本地从不报错。
+- **验证**：`POST /resource/oss/upload` 返回 200，URL 为 `http://172.16.16.110:9000/...` 且公网可下载。
+- **注意**：新装服务器/重装系统后需重新执行该 mkdir；已写入《服务器部署指南》启动一节。
