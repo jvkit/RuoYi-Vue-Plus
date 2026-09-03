@@ -30,6 +30,7 @@
 | 运行目录 | `/home/liyang/jvkit/oa/` | — | dist、jar、logs |
 | MySQL | docker 容器 `ruoyi-mysql` | `127.0.0.1:3306/ry-vue-6x` | 与本地开发库同名 |
 | Redis | docker 容器 `ruoyi-redis` | `127.0.0.1:6379` | 密码 `ruoyi123` |
+| MinIO（OA 文件存储） | docker 容器 `minio` | `9000`（API）/ `9001`（控制台） | `ruoyi/ruoyi123`，桶 `ruoyi` 公开读；与 Langfuse 自带 MinIO（9092）相互独立 |
 
 ---
 
@@ -63,6 +64,11 @@
 | OA 后端 | 8092 | `deploy.sh` 中 `BACKEND_PORT` |
 | MySQL | 3306 | docker run 参数 |
 | Redis | 6379 | docker run 参数 |
+| MinIO（OA 文件存储） | 9000 / 9001 | docker run 参数（UFW 已放行 9000） |
+| Langfuse MinIO | 9092 | Langfuse compose 专用，勿改 |
+| Langfuse UI | 3030 | Langfuse compose |
+
+**OSS 地址约定**：`sys_oss_config` minio 行 endpoint=`127.0.0.1:9000`（后端本机上传）、domain_url=`172.16.16.110:9000`（前端访问，URL 生成 domain 优先）。若批量改了 `sys_oss.url` 或 domain_url，**必须 `DEL sys_oss`（Redis hash 缓存 ossId→url）并重启后端**，否则继续返回旧地址。
 
 如果需要换后端端口：
 1. 修改 `ruoyi-6x/deploy.sh` 中的 `BACKEND_PORT`。

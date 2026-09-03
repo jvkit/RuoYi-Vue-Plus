@@ -91,11 +91,14 @@
 - **验证**：访问 `http://172.16.16.110:3030/project/bcc58c89-fdb0-4ded-8e10-b0ef406bec5f/traces` 可见 `invoice.extract` trace。
 - **注意**：Langfuse UI 项目路径使用 UUID，不是 `oa-agents` slug。
 
-## 12. 服务器 MinIO 与 OA OSS 地址不匹配
+## 12. 服务器 MinIO 与 OA OSS 地址不匹配 ✅ 已解决（2026-09-03）
 
 - **现象**：仓库库存验收图片显示通用图标，OSS URL 为 `http://127.0.0.1:9000/ruoyi/...`，浏览器无法访问。
 - **原因**：
   - 服务器只有 Langfuse 自带 MinIO，端口 `9092`（容器内 9000）。
   - OA 文件存储配置指向 `127.0.0.1:9000`，但服务器上没有为 OA 独立运行的 MinIO 容器。
-- **影响**：所有通过 OA 上传的图片/PDF，前端预览/显示失败。
-- **待处理**：选择方案并修复，见 `docs/账户与环境信息汇总.md` 第三节。
+- **修复**（详见 `docs/账户与环境信息汇总.md` 第三节）：
+  - 服务器部署独立 MinIO 容器（9000/9001，`ruoyi/ruoyi123`，桶 `ruoyi` 公开读，UFW 放行 9000）。
+  - `sys_oss_config` minio 行 domain_url 设为 `172.16.16.110:9000`，存量 `sys_oss.url` 批量替换（幂等 SQL `procurement_6x_v13_minio_domain.sql`）。
+  - **坑**：`sys_oss` 是 Redis hash 缓存（ossId→url），改库后必须 `DEL sys_oss` 并重启后端，否则继续返回旧地址。
+- **验证**：Playwright 冒烟仓库库存页，图片地址为 `172.16.16.110:9000` 且全部真实加载。

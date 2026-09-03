@@ -61,6 +61,7 @@ curl -s http://127.0.0.1:8092/                                       # 后端直
 4. **菜单/权限漏同步**：部署后新页面 404 或「无权访问」，八成是 SQL 脚本没跑到或没写（见 `oa-menu-perms` skill）。
 5. **浏览器缓存**：前端更新后用户可能加载旧 index.html，部署后提示强制刷新（Ctrl+F5）。
 6. **SSE 超时**：`/resource/message` 长连接在 nginx error log 报 upstream timed out，属正常，可忽略。
+7. **OSS 地址缓存**：`sys_oss` 是 Redis hash（ossId→含 url 的 JSON），`sys_oss_config` 也在 Redis。批量改了 `sys_oss.url` / domain_url 后必须 `DEL sys_oss`（或直接 `docker restart ruoyi-redis`）并重启后端，否则图片/PDF 继续走旧地址。服务器 MinIO 为独立容器 `minio`（9000/9001，`ruoyi/ruoyi123`，桶 `ruoyi` 公开读），与 Langfuse 的 MinIO（9092）互不相干。
 
 ## 服务器与本地的差异对照
 
@@ -69,7 +70,8 @@ curl -s http://127.0.0.1:8092/                                       # 后端直
 | 后端端口 | 8091 | 8092 |
 | 启动方式 | `scripts/start-6x.sh` | `deploy.sh` / 手动 nohup |
 | MySQL 容器名 | `mysql` | `ruoyi-mysql` |
-| agents 服务 | `uvicorn :8093` | 服务器暂未部署 agents（发票 AI 匹配在服务器不可用，属已知限制） |
+| agents 服务 | `uvicorn :8093` | `deploy.sh` 自动启动 :8093 |
+| MinIO | 容器 `minio` 9000/9001 | 容器 `minio` 9000/9001（另 Langfuse 专用 9092） |
 | 数据库 | `ry-vue-6x` root/root | `ry-vue-6x` root/ruoyi123 |
 
 ## 检查清单（每次部署走一遍）
