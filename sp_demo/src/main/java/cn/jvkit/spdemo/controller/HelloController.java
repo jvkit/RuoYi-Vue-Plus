@@ -40,7 +40,7 @@ public class HelloController {
      * 返回 JSON 对象
      * 访问：http://localhost:8080/hello/user
      */
-    
+
     @GetMapping("/user")
     public User helloUser() {
         return new User(1L, "张三", 20);
@@ -77,5 +77,11 @@ public class HelloController {
         }
         return Result.ok("你好，" + name);
     }
+
+    @GetMapping ("/ai")
+    public String ai(){
+        return "你好，我是ai";
+    }
+
 
 }

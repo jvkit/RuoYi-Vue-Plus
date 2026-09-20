@@ -88,5 +88,13 @@ public class UserController {
         userService.delete(id);
         return Result.ok();
     }
+     /**
+      * 判断用户是否存在
+      * GET /users/1/exists
+      */
+     @GetMapping("/{id}/exists")
+     public Result<Boolean> exists(@PathVariable Long id) {
+         return Result.ok(userService.exists(id));
+     }    
 
 }

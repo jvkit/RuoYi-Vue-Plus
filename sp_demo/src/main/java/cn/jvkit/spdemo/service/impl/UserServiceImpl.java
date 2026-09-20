@@ -72,6 +72,6 @@ public class UserServiceImpl implements UserService {
     @Override
     public boolean exists(Long id) {
         return userStore.containsKey(id);
-    }    
-
+    }  
+    
 }

@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "target": "esnext",
+    "checkJs": false
+  },
+  "include": ["crawler/**/*.js", "practice/**/*.js", "*.js"],
+  "exclude": ["node_modules", "target"]
+}
