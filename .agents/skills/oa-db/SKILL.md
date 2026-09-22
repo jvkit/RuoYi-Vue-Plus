@@ -75,15 +75,18 @@ PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 | 1801100~1801104 | BOM 表(产品) |
 | 1801110~1801111 | 流转记录 |
 | 1801120~1801123 | 采购合同 |
-| 1801130~1801133 | 报销导出 |
-| 1801140~1801142 | 资金管理 |
+| 1801130~1801135 | 报销导出（134 报销编辑、135 报销删除，v14 补的历史缺失权限） |
+| 1801140~1801145 | 资金管理（143 资金状态管理 `fund:status`、144 备用金额度配置 `fund:quota`、145 资金维护 `fund:edit`） |
 | 1801150~1801151 | 手机端专属 / 移动验收（一级目录） |
 | 1801160~1801162 | 发票台账 |
 | 1805000 | PRIME AI 外链 |
+| 1802001 / 1802002 | 字典类型：采购类型 `pms_purchase_type` / 资金状态 `pms_fund_status` |
+| 1803001~1803015 / 1803020~1803023 | 字典数据：采购类型 / 资金状态 4 值 |
+| 1804000000000000001+ | `pms_reserve_account` 回填 ID 段（备用金额度账户） |
 | 1761100000000000001 | admin 用户 id |
-| 1761300000000000001~13 | 角色：superadmin(01)/team_leader(02→CEO)/dept_leader(10→最高决策人)/acceptance_contact(11)/warehouse_admin(12)/common_user(13) |
+| 1761300000000000001~14 | 角色：superadmin(01)/team_leader(09→CEO)/dept_leader(10→最高决策人)/acceptance_contact(11)/warehouse_admin(12)/common_user(13)/**procurement_manager(14→采购经理，资金管理与报销)** |
 | 1761400000000011xxx | 工作流菜单（1616 工作流目录、1618 我的任务、1700 流程设计隐藏页、1630 流程监控） |
-| 17617000000000001xx | sys_config 自定义参数（101~103 采购导出配置） |
+| 17617000000000001xx | sys_config 自定义参数（101~103 采购导出配置、104 备用金默认额度 `procurement.reserve.default_quota`） |
 
 ## 关键角色 ID 速查
 

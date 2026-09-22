@@ -26,12 +26,16 @@ SELECT flow_code, flow_name, version, is_publish, form_path FROM flow_definition
 4. 动态指定审批人：`permission_flag` 写 `${变量名}`（如 `${applicantId}`），提交时通过 `StartProcessDTO.variables` 传入用户 ID 字符串。
 5. 第一个业务节点应是「申请人」节点，`startCompleteTask` 提交时会自动完成它。
 
-## 当前流程设计（v5）
+## 当前流程设计（v5 结构 + v15 暂跳过最高决策人）
 
 ```
 pms_request（采购申请）:
   start → apply(申请人) → leader(项目负责人) → ceo(CEO,role:team_leader)
-  → gateway_amount(网关) → [lt@@amount|1000 → end | ge@@amount|1000 → supreme(最高决策人,role:dept_leader) → end]
+  → gateway_amount(网关) → [lt@@amount|1000 → end | ge@@amount|1000 → end]
+  # ⚠️ v15 起 >=1000 分支也直接到 end：最高决策人（李老师）暂不参与审批。
+  #    supreme_decision_maker 节点与 role:dept_leader 绑定仍保留在定义里，成为不可达节点。
+  #    恢复：执行 procurement_6x_v15_flow_skip_supreme.sql 末尾注释里的 UPDATE
+  #    （把 next_node_code 改回 supreme_decision_maker，next_node_type 改回 1），然后重启后端。
 
 pms_acceptance（采购验收）:
   start → apply(发起人) → applicant(采购申请人,${applicantId} 动态取申请 create_by)
@@ -84,6 +88,10 @@ pms_issue_request（领用申请）:
 | 流程图连线穿节点/拐弯怪异 | `flow_skip.coordinate` 缺折点或折点算错；连线的起终点必须落在节点边缘（中心±50） |
 | 流程图/流程监控打不开 | 缺 `workflow:instance:query` 权限（菜单 1761400000000011653）或流程设计隐藏菜单 1761400000000011700 未绑定 |
 | 驳回后单据打不开 | 业务表状态被置为终结态，详情页按状态禁用了入口；审批详情页应支持查看历史实例 |
+| 想让某节点自动通过，配了 `autoPass` 却没生效 | `autoPass`（`CompleteAutoPassComponent`）只跳过「**当前登录人仍是办理人**」的后续节点，跳不过别人的节点。要跳过他人审批只能：改网关出边指向（零代码，见 v15）或写节点监听器自动 skip |
+| 改了 `flow_skip.next_node_code` 后流转异常 | `next_node_type` 没同步改。节点类型：0 start / 1 普通审批 / 2 end / 3 排他网关 / 4 并行 / 5 包容，改指向必须一起改类型 |
+| 改了流程定义 SQL 但行为没变 | warm-flow 有内存缓存，**必须重启后端** |
+| 恢复类 SQL 放进 `script/sql/` 后刚部署就失效 | `apply-sql.sh` 会执行目录下所有未记录脚本。恢复/回滚语句必须以**注释**形态存放（见 `procurement_6x_v15_flow_skip_supreme.sql` 末尾写法） |
 
 ## 业务状态同步
 
