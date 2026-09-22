@@ -228,11 +228,13 @@ SET f.title_type     = r.title_type,
     f.applicant_name = u.nick_name
 WHERE f.title_type IS NULL OR f.applicant_id IS NULL;
 
--- 8.2 已完成申请置资金状态
+-- 8.2 已完成申请置资金状态（只处理未逻辑删除的单子：已删除单据不进资金看板/列表，
+--     给它们写状态没有意义，还会让「回填总数」与「看板笔数」对不上，排查时容易误判）
 --     自购（含历史 title_type 为空的旧单，历史上均为自购口径）→ 已采购未报销
 UPDATE pms_procurement_request
 SET fund_status = 'purchased_unreimbursed'
 WHERE status = 'finish'
+  AND del_flag = '0'
   AND fund_status IS NULL
   AND (title_type = '自购' OR title_type IS NULL OR title_type = '');
 
@@ -240,6 +242,7 @@ WHERE status = 'finish'
 UPDATE pms_procurement_request
 SET fund_status = 'not_applicable'
 WHERE status = 'finish'
+  AND del_flag = '0'
   AND fund_status IS NULL
   AND title_type = '对公';
 
@@ -254,7 +257,8 @@ SELECT 1804000000000000000 + ROW_NUMBER() OVER (ORDER BY u.user_id),
        @dept_id, @admin_id, sysdate(), 0
 FROM sys_user u
 WHERE u.del_flag = '0'
-  AND EXISTS (SELECT 1 FROM pms_procurement_request r WHERE r.create_by = u.user_id AND r.title_type = '自购')
+  AND EXISTS (SELECT 1 FROM pms_procurement_request r
+              WHERE r.create_by = u.user_id AND r.title_type = '自购' AND r.del_flag = '0')
   AND NOT EXISTS (SELECT 1 FROM pms_reserve_account a WHERE a.person_id = u.user_id);
 
 -- ============================================================
