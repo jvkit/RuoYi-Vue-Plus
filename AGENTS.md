@@ -341,6 +341,8 @@ docker start open-webui-feedback-owu
 - **流程跳过节点的坑**：`autoPass`（`CompleteAutoPassComponent`）只自动跳过「当前登录人仍是办理人」的后续节点，**跳不过别人的节点**；要跳过他人审批节点只能改网关出边（零代码）或写节点监听器
 - **「我的任务」办理/查看跳转约定**：待办/已办点「办理/查看」→ `workflowCommon.routerJump` → `router.push(formPath)`；formPath 取 `flow_definition.form_path`（非节点），需配业务详情页路由（如 `/procurement/request/detail`），且该详情页必须：① 存在前端组件 `src/views/procurement/request/detail.vue`；② 挂一条隐藏菜单（父为**目录 M**、path 带子路径如 `request/detail`，目录才会递归生成路由）；③ 页面接收 `type(approval/view)&taskId&id` 路由参数，用 `approvalButton`+`submitVerify` 完成审批
 - 6x 发票 SQL 脚本：`ruoyi-6x/script/sql/invoice_6x.sql`（幂等：发票两表建表去租户、字典 invoice_type/invoice_status、菜单 1804xxx 含发票信息/发票提交/发票使用记录）
+- **发票入口合并（2026-09-22）**：老发票模块（`views/invoice` + `api/invoice` + 菜单 1804000~1804012）已删除，唯一入口 = 采购管理/发票台账（`views/procurement/invoice`）。台账「上传发票」弹窗两 Tab：AI 一键匹配（复用 `/procurement/acceptance/ai-invoice-match`，选关联申请后按商品名匹配写台账）+ 手动挂载（`POST /procurement/invoice/manual-upload`）。验收页已摘掉发票上传列（后端字段保留兼容历史）。SQL：`procurement_6x_v17_invoice_merge.sql`（`pms_invoice` 加 amount 列、按钮 1801163、删老菜单、superadmin 补绑）
+- **报销打包（2026-09-22）**：`PmsReimbursementPackService` 产出 ZIP = 申请 Excel + `验收图片/` + `发票pdf/` + `清单.txt`。三个坑：① `file_url` 必须存 **ossId 而非 URL**（下载接口按 ossId 解析）；② MinIO 文件名是 UUID，URL 里抠不出 ossId，须用 `SysOssMapper` 按 url 反查；③ Hutool `ZipUtil` 会压平目录 + 中文乱码，**必须自己用 `ZipOutputStream` + `StandardCharsets.UTF_8` 递归打包**（命令行 unzip 显示乱码是假象，用 python zipfile 校验）。SQL：`procurement_6x_v18_reimbursement_status.sql`（status 扩到 varchar(32)，`purchased_unreimbursed` 等 20+ 值会超长）
 - **服务器部署补全检查清单**：部署到新环境或服务器后，除了执行基线脚本，还需核对本地开发库与服务器库的差异，常见漏项：
   - 发票管理模块：`invoice_6x.sql`
   - PRIME AI 外链菜单：`procurement_6x_server_patch.sql` 中插入菜单 1805000，外链 `http://172.16.16.110:3305`
