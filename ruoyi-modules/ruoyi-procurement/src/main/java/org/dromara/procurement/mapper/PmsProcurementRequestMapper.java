@@ -2,9 +2,11 @@ package org.dromara.procurement.mapper;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 import org.dromara.common.mybatis.core.mapper.BaseMapperPlus;
 import org.dromara.procurement.domain.PmsProcurementRequest;
 import org.dromara.procurement.domain.bo.PmsProcurementRequestBo;
+import org.dromara.procurement.domain.vo.PmsFundStatusBoardVo;
 import org.dromara.procurement.domain.vo.PmsProcurementRequestVo;
 
 import java.util.List;
@@ -25,5 +27,24 @@ public interface PmsProcurementRequestMapper extends BaseMapperPlus<PmsProcureme
      * 查询可验收的采购申请列表（关联项目）
      */
     List<PmsProcurementRequestVo> selectAcceptableList();
+
+    /**
+     * 资金状态看板：按 fund_status 统计已审批通过申请的笔数与金额合计（催办用）
+     * <p>
+     * 只统计 status='finish' 的申请；未进入资金状态（fund_status 为空）的不出现在结果里，
+     * 由 Service 补齐固定 4 行并填 0。
+     */
+    @Select("""
+        SELECT r.fund_status AS status,
+               COUNT(*) AS count,
+               COALESCE(SUM(r.amount), 0) AS amount
+        FROM pms_procurement_request r
+        WHERE r.del_flag = '0'
+          AND r.status = 'finish'
+          AND r.fund_status IS NOT NULL
+          AND r.fund_status <> ''
+        GROUP BY r.fund_status
+        """)
+    List<PmsFundStatusBoardVo> selectFundStatusBoard();
 
 }

@@ -79,6 +79,12 @@ public class PmsProcurementRequestVo implements Serializable {
     private String leader;
 
     /**
+     * 申请人姓名（= create_by 对应的用户昵称，资金状态管理/备用金归属用）
+     */
+    @ExcelProperty(value = "申请人")
+    private String applicantName;
+
+    /**
      * 采购对接人（自动带出）
      */
     @ExcelProperty(value = "采购对接人")
@@ -138,6 +144,47 @@ public class PmsProcurementRequestVo implements Serializable {
      */
     @ExcelProperty(value = "验收标志")
     private String acceptanceStatus;
+
+    /**
+     * 资金状态（purchased_unreimbursed/reimbursed_unpaid/reimbursed_paid/not_applicable）
+     */
+    @ExcelProperty(value = "资金状态")
+    private String fundStatus;
+
+    /**
+     * 关联报销包编号（无报销包时为空，仅展示用）
+     */
+    private String reimbursementCode;
+
+    /**
+     * 标记已报销时间
+     */
+    private LocalDateTime reimburseDate;
+
+    /**
+     * 标记已报销的操作人ID
+     */
+    private Long reimburseBy;
+
+    /**
+     * 标记已报销的操作人姓名
+     */
+    private String reimburseByName;
+
+    /**
+     * 汇款确认时间
+     */
+    private LocalDateTime paidDate;
+
+    /**
+     * 汇款确认人ID
+     */
+    private Long paidBy;
+
+    /**
+     * 汇款确认人姓名
+     */
+    private String paidByName;
 
     /**
      * 流程实例ID

@@ -11,13 +11,17 @@ import org.dromara.common.mybatis.core.page.PageQuery;
 import org.dromara.common.core.domain.PageResult;
 import org.dromara.common.web.core.BaseController;
 import org.dromara.procurement.domain.bo.PmsFundFlowBo;
+import org.dromara.procurement.domain.bo.PmsFundStatusBo;
 import org.dromara.procurement.domain.vo.PmsFundFlowVo;
+import org.dromara.procurement.domain.vo.PmsFundStatusBoardVo;
 import org.dromara.procurement.domain.vo.PmsFundSummaryVo;
 import org.dromara.procurement.service.IPmsFundFlowService;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -83,5 +87,26 @@ public class PmsFundFlowController extends BaseController {
     public R<Void> sync() {
         fundFlowService.syncFromRequests();
         return R.ok();
+    }
+
+    /**
+     * 资金状态看板（按资金状态统计笔数与金额，催办用）
+     */
+    @SaCheckPermission("procurement:fund:list")
+    @GetMapping("/status/board")
+    public R<List<PmsFundStatusBoardVo>> statusBoard() {
+        return R.ok(fundFlowService.statusBoard());
+    }
+
+    /**
+     * 批量推进资金状态（标记已报销 / 确认已汇款）
+     * <p>
+     * 单向不可回溯：一旦推进不允许回退，操作人与时间会留痕在申请单上。
+     */
+    @SaCheckPermission("procurement:fund:status")
+    @Log(title = "资金状态", businessType = BusinessType.UPDATE)
+    @PutMapping("/status")
+    public R<Void> changeStatus(@Validated @RequestBody PmsFundStatusBo bo) {
+        return R.ok(fundFlowService.changeFundStatus(bo));
     }
 }

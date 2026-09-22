@@ -94,6 +94,23 @@ public class PmsFundFlowVo implements Serializable {
     private String operatorName;
 
     /**
+     * 采购方式（自购/对公）
+     */
+    @ExcelProperty(value = "自购对公")
+    private String titleType;
+
+    /**
+     * 申请人ID
+     */
+    private Long applicantId;
+
+    /**
+     * 申请人姓名快照
+     */
+    @ExcelProperty(value = "申请人")
+    private String applicantName;
+
+    /**
      * 备注
      */
     @ExcelProperty(value = "备注")

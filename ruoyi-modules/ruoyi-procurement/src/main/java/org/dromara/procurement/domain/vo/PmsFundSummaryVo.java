@@ -50,6 +50,13 @@ public class PmsFundSummaryVo implements Serializable {
     private List<PmsFundProjectSummaryVo> projects = new ArrayList<>();
 
     /**
+     * 备用金账本汇总（第二本账：总额度/已占用/可用/已回笼）
+     * <p>
+     * 与项目账本互不影响：备用金侧任何操作都不改变 totalUsed（见 v4 设计 §2.2 口径 K1/K5）
+     */
+    private PmsReserveSummaryVo reserve = new PmsReserveSummaryVo();
+
+    /**
      * 按项目汇总
      */
     @Data

@@ -9,6 +9,7 @@ import org.dromara.common.mybatis.core.domain.BaseEntity;
 
 import java.io.Serial;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 /**
  * 采购管理-采购申请对象 pms_procurement_request
@@ -98,6 +99,41 @@ public class PmsProcurementRequest extends BaseEntity {
      * 验收标志（none未验收/processing验收中/done已完成验收）
      */
     private String acceptanceStatus;
+
+    /**
+     * 资金状态（purchased_unreimbursed已采购未报销/reimbursed_unpaid已报销未汇款/reimbursed_paid已报销已汇款/not_applicable不适用对公）
+     */
+    private String fundStatus;
+
+    /**
+     * 标记已报销时间
+     */
+    private LocalDateTime reimburseDate;
+
+    /**
+     * 标记已报销的操作人ID
+     */
+    private Long reimburseBy;
+
+    /**
+     * 标记已报销的操作人姓名
+     */
+    private String reimburseByName;
+
+    /**
+     * 汇款确认时间
+     */
+    private LocalDateTime paidDate;
+
+    /**
+     * 汇款确认人ID
+     */
+    private Long paidBy;
+
+    /**
+     * 汇款确认人姓名
+     */
+    private String paidByName;
 
     /**
      * 流程实例ID

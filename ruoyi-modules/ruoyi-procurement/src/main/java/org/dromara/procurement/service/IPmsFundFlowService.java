@@ -3,7 +3,9 @@ package org.dromara.procurement.service;
 import org.dromara.common.core.domain.PageResult;
 import org.dromara.common.mybatis.core.page.PageQuery;
 import org.dromara.procurement.domain.bo.PmsFundFlowBo;
+import org.dromara.procurement.domain.bo.PmsFundStatusBo;
 import org.dromara.procurement.domain.vo.PmsFundFlowVo;
+import org.dromara.procurement.domain.vo.PmsFundStatusBoardVo;
 import org.dromara.procurement.domain.vo.PmsFundSummaryVo;
 
 import java.util.List;
@@ -46,4 +48,17 @@ public interface IPmsFundFlowService {
      * 资金同步：根据所有 status='finish' 的采购申请重建项目已用金额和资金流水
      */
     void syncFromRequests();
+
+    /**
+     * 资金状态看板：固定返回 4 行（已采购未报销/已报销未汇款/已报销已汇款/不适用），无数据填 0
+     */
+    List<PmsFundStatusBoardVo> statusBoard();
+
+    /**
+     * 批量推进采购申请资金状态（单向不可回溯）
+     *
+     * @param bo ids + action（reimburse=标记已报销 / paid=确认已汇款）
+     * @return 处理结果提示，形如「成功 N 笔，跳过 M 笔（原因）」
+     */
+    String changeFundStatus(PmsFundStatusBo bo);
 }

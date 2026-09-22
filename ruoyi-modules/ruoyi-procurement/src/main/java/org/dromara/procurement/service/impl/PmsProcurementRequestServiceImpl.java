@@ -30,12 +30,14 @@ import org.dromara.procurement.domain.bo.PmsProcurementRequestBo;
 import org.dromara.procurement.domain.bo.PmsProcurementRequestItemBo;
 import org.dromara.procurement.domain.vo.PmsProcurementRequestItemVo;
 import org.dromara.procurement.domain.vo.PmsProcurementRequestVo;
+import org.dromara.procurement.enums.PmsFundStatusEnum;
 import org.dromara.procurement.mapper.PmsProcurementRequestItemMapper;
 import org.dromara.procurement.mapper.PmsProcurementRequestMapper;
 import org.dromara.procurement.mapper.PmsProjectMapper;
 import org.dromara.procurement.mapper.PmsFundFlowMapper;
 import org.dromara.procurement.mapper.PmsFlowApproverMapper;
 import org.dromara.procurement.service.IPmsProcurementRequestService;
+import org.dromara.procurement.service.IPmsReserveAccountService;
 import org.dromara.procurement.utils.PmsPlatformUtil;
 import org.dromara.system.domain.SysUser;
 import org.dromara.system.mapper.SysUserMapper;
@@ -85,6 +87,12 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
     private final WorkflowService workflowService;
     private final ISysConfigService configService;
     private final SysUserMapper userMapper;
+    private final IPmsReserveAccountService reserveAccountService;
+
+    /**
+     * 采购方式：对公（与备用金无关，资金状态置 not_applicable）
+     */
+    private static final String TITLE_TYPE_PUBLIC = "对公";
 
     /**
      * 已导出的文件名集合（按天），用于导出 Excel 同名时追加三位序数
@@ -160,6 +168,7 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
         bo.setTitle(buildTitle(bo));
         calcHeaderAmount(bo);
         PmsProcurementRequest add = MapstructUtils.convert(bo, PmsProcurementRequest.class);
+        clearFundFields(add);
         boolean flag = baseMapper.insert(add) > 0;
         if (flag) {
             bo.setId(add.getId());
@@ -181,6 +190,7 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
         calcHeaderAmount(bo);
         bo.setTitle(buildTitle(bo));
         PmsProcurementRequest update = MapstructUtils.convert(bo, PmsProcurementRequest.class);
+        clearFundFields(update);
         boolean flag = baseMapper.updateById(update) > 0;
         if (flag) {
             itemMapper.delete(Wrappers.<PmsProcurementRequestItem>lambdaQuery()
@@ -294,6 +304,12 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
         if (!started) {
             throw new ServiceException("流程发起失败");
         }
+        // 自购申请：确保申请人拥有备用金账户（懒创建，额度取 sys_config 默认值）。
+        // 对公与备用金无关，不创建。账户创建失败不阻断采购提交（ensureAccount 内部已容错）。
+        if (!TITLE_TYPE_PUBLIC.equals(request.getTitleType())) {
+            Long applicantId = ObjectUtil.isNull(request.getCreateBy()) ? LoginHelper.getUserId() : request.getCreateBy();
+            reserveAccountService.ensureAccount(applicantId);
+        }
         request.setStatus(BusinessStatusEnum.WAITING.getStatus());
         baseMapper.updateById(request);
         return queryById(request.getId());
@@ -326,7 +342,50 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
             && !BusinessStatusEnum.FINISH.getStatus().equals(oldStatus)) {
             accumulateUsedAmount(request);
             createFundFlow(request);
+            initFundStatus(request);
         }
+    }
+
+    /**
+     * 审批通过时初始化资金状态（幂等：仅在为空时设置，避免流程重复回调覆盖已推进的状态）
+     * <p>
+     * 自购（含历史 title_type 为空的旧单，按自购口径回填）→ 已采购未报销；
+     * 对公 → 不适用（不进三态、不计入备用金占用，报销包仍可生成做材料归档）。
+     * 状态推进只能走 /procurement/fund/status 专用接口，单向不可回溯。
+     */
+    private void initFundStatus(PmsProcurementRequest request) {
+        if (StringUtils.isNotBlank(request.getFundStatus())) {
+            return;
+        }
+        String fundStatus = TITLE_TYPE_PUBLIC.equals(request.getTitleType())
+            ? PmsFundStatusEnum.NOT_APPLICABLE.getStatus()
+            : PmsFundStatusEnum.PURCHASED_UNREIMBURSED.getStatus();
+        PmsProcurementRequest update = new PmsProcurementRequest();
+        update.setId(request.getId());
+        update.setFundStatus(fundStatus);
+        baseMapper.updateById(update);
+        request.setFundStatus(fundStatus);
+        log.info("资金状态初始化：申请[{}] -> {}", request.getRequestCode(), fundStatus);
+    }
+
+    /**
+     * 丢弃 BO 携带的资金状态字段
+     * <p>
+     * 资金状态只能由 /procurement/fund/status 专用接口单向推进（业务要求不可回溯），
+     * 因此普通新增/编辑接口一律忽略前端传来的 fund_status 及报销/汇款留痕字段，
+     * 防止旧表单提交把已推进的状态覆盖回去。
+     */
+    private void clearFundFields(PmsProcurementRequest entity) {
+        if (ObjectUtil.isNull(entity)) {
+            return;
+        }
+        entity.setFundStatus(null);
+        entity.setReimburseDate(null);
+        entity.setReimburseBy(null);
+        entity.setReimburseByName(null);
+        entity.setPaidDate(null);
+        entity.setPaidBy(null);
+        entity.setPaidByName(null);
     }
 
     /**
@@ -358,6 +417,14 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
             flow.setOperatorId(project.getLeaderId());
         }
         flow.setOperatorName(LoginHelper.getUsername());
+        // 分账维度：采购方式（自购/对公）+ 申请人（=谁的钱），均为申请单快照
+        flow.setTitleType(request.getTitleType());
+        Long applicantId = ObjectUtil.isNull(request.getCreateBy()) ? LoginHelper.getUserId() : request.getCreateBy();
+        flow.setApplicantId(applicantId);
+        if (ObjectUtil.isNotNull(applicantId)) {
+            SysUser applicant = userMapper.selectById(applicantId);
+            flow.setApplicantName(ObjectUtil.isNull(applicant) ? null : applicant.getNickName());
+        }
         flow.setRemark("采购申请审批通过自动记录");
         fundFlowMapper.insert(flow);
         log.info("资金流水已记录：申请[{}] 金额[{}]", request.getId(), request.getAmount());

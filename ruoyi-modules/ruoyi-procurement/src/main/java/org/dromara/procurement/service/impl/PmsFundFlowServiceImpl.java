@@ -7,17 +7,25 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.dromara.common.core.domain.PageResult;
+import org.dromara.common.core.exception.ServiceException;
 import org.dromara.common.mybatis.core.page.PageQuery;
+import org.dromara.common.satoken.utils.LoginHelper;
 import org.dromara.procurement.domain.PmsFundFlow;
 import org.dromara.procurement.domain.PmsProcurementRequest;
 import org.dromara.procurement.domain.PmsProject;
 import org.dromara.procurement.domain.bo.PmsFundFlowBo;
+import org.dromara.procurement.domain.bo.PmsFundStatusBo;
 import org.dromara.procurement.domain.vo.PmsFundFlowVo;
+import org.dromara.procurement.domain.vo.PmsFundStatusBoardVo;
 import org.dromara.procurement.domain.vo.PmsFundSummaryVo;
+import org.dromara.procurement.enums.PmsFundStatusEnum;
 import org.dromara.procurement.mapper.PmsFundFlowMapper;
 import org.dromara.procurement.mapper.PmsProcurementRequestMapper;
 import org.dromara.procurement.mapper.PmsProjectMapper;
 import org.dromara.procurement.service.IPmsFundFlowService;
+import org.dromara.procurement.service.IPmsReserveAccountService;
+import org.dromara.system.domain.SysUser;
+import org.dromara.system.mapper.SysUserMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +34,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -43,6 +52,8 @@ public class PmsFundFlowServiceImpl implements IPmsFundFlowService {
     private final PmsFundFlowMapper baseMapper;
     private final PmsProjectMapper projectMapper;
     private final PmsProcurementRequestMapper requestMapper;
+    private final IPmsReserveAccountService reserveAccountService;
+    private final SysUserMapper userMapper;
 
     @Override
     public PmsFundFlowVo queryById(Long id) {
@@ -76,6 +87,12 @@ public class PmsFundFlowServiceImpl implements IPmsFundFlowService {
         LambdaQueryWrapper<PmsFundFlow> wrapper = Wrappers.lambdaQuery();
         wrapper.eq(bo.getProjectId() != null, PmsFundFlow::getProjectId, bo.getProjectId());
         wrapper.eq(org.dromara.common.core.utils.StringUtils.isNotBlank(bo.getFlowType()), PmsFundFlow::getFlowType, bo.getFlowType());
+        // 采购方式（自购/对公）：分账筛选的基础
+        wrapper.eq(org.dromara.common.core.utils.StringUtils.isNotBlank(bo.getTitleType()), PmsFundFlow::getTitleType, bo.getTitleType());
+        // 申请人：ID 精确 / 姓名模糊
+        wrapper.eq(bo.getApplicantId() != null, PmsFundFlow::getApplicantId, bo.getApplicantId());
+        wrapper.like(org.dromara.common.core.utils.StringUtils.isNotBlank(bo.getApplicantName()),
+            PmsFundFlow::getApplicantName, bo.getApplicantName());
         // 关键字：申请标题/编号模糊
         if (org.dromara.common.core.utils.StringUtils.isNotBlank(bo.getRequestTitle())) {
             wrapper.and(w -> w
@@ -162,6 +179,8 @@ public class PmsFundFlowServiceImpl implements IPmsFundFlowService {
         summary.setTotalUsed(totalUsed);
         summary.setTotalRemaining(totalBudget.subtract(totalUsed));
         summary.setProjects(projectSummaries);
+        // 第二本账：备用金（额度/占用/可用/回笼），与项目账本互不影响
+        summary.setReserve(reserveAccountService.summary());
         return summary;
     }
 
@@ -240,6 +259,138 @@ public class PmsFundFlowServiceImpl implements IPmsFundFlowService {
             count++;
         }
         log.info("资金同步完成：共处理 {} 条采购申请", count);
+    }
+
+    /**
+     * 资金状态看板：固定 4 行（含 0 值行），label 取枚举中文名，顺序即状态机推进顺序
+     */
+    @Override
+    public List<PmsFundStatusBoardVo> statusBoard() {
+        Map<String, PmsFundStatusBoardVo> statMap = new LinkedHashMap<>();
+        for (PmsFundStatusBoardVo row : requestMapper.selectFundStatusBoard()) {
+            if (row.getStatus() != null) {
+                statMap.put(row.getStatus(), row);
+            }
+        }
+        List<PmsFundStatusBoardVo> board = new ArrayList<>();
+        for (PmsFundStatusEnum statusEnum : PmsFundStatusEnum.values()) {
+            PmsFundStatusBoardVo row = statMap.get(statusEnum.getStatus());
+            if (row == null) {
+                row = new PmsFundStatusBoardVo();
+                row.setStatus(statusEnum.getStatus());
+                row.setCount(0L);
+                row.setAmount(BigDecimal.ZERO);
+            }
+            row.setLabel(statusEnum.getDesc());
+            board.add(row);
+        }
+        return board;
+    }
+
+    /**
+     * 批量推进资金状态（单向不可回溯）
+     * <p>
+     * 业务要求：一旦标记报销就不能回退，因此这里只做「向前推进」校验，
+     * 不合法的申请跳过并在提示里说明原因（不整批失败，避免一笔脏数据卡住整批操作）。
+     * 每次变更都写操作人 + 时间留痕（不可回溯 ⇒ 必须能查谁改的）。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public String changeFundStatus(PmsFundStatusBo bo) {
+        PmsFundStatusEnum target;
+        if ("reimburse".equals(bo.getAction())) {
+            target = PmsFundStatusEnum.REIMBURSED_UNPAID;
+        } else if ("paid".equals(bo.getAction())) {
+            target = PmsFundStatusEnum.REIMBURSED_PAID;
+        } else {
+            throw new ServiceException("不支持的操作类型：" + bo.getAction());
+        }
+        List<PmsProcurementRequest> requests = requestMapper.selectList(
+            Wrappers.<PmsProcurementRequest>lambdaQuery().in(PmsProcurementRequest::getId, bo.getIds()));
+        if (CollUtil.isEmpty(requests)) {
+            throw new ServiceException("采购申请不存在");
+        }
+
+        Long operatorId = LoginHelper.getUserId();
+        String operatorName = resolveNickName(operatorId);
+        LocalDateTime now = LocalDateTime.now();
+
+        int success = 0;
+        Map<String, Integer> skipReasons = new LinkedHashMap<>();
+        for (PmsProcurementRequest request : requests) {
+            String current = request.getFundStatus();
+            if (!PmsFundStatusEnum.canTransfer(current, target.getStatus())) {
+                skipReasons.merge(skipReason(current, target), 1, Integer::sum);
+                continue;
+            }
+            PmsProcurementRequest update = new PmsProcurementRequest();
+            update.setId(request.getId());
+            update.setFundStatus(target.getStatus());
+            if (target == PmsFundStatusEnum.REIMBURSED_UNPAID) {
+                update.setReimburseDate(now);
+                update.setReimburseBy(operatorId);
+                update.setReimburseByName(operatorName);
+            } else {
+                update.setPaidDate(now);
+                update.setPaidBy(operatorId);
+                update.setPaidByName(operatorName);
+                // 允许跳级：从「已采购未报销」直接确认汇款时，报销留痕一并补齐
+                if (PmsFundStatusEnum.PURCHASED_UNREIMBURSED.getStatus().equals(current)) {
+                    update.setReimburseDate(now);
+                    update.setReimburseBy(operatorId);
+                    update.setReimburseByName(operatorName);
+                }
+            }
+            requestMapper.updateById(update);
+            success++;
+            log.info("资金状态推进：申请[{}] {} -> {}，操作人[{}]",
+                request.getRequestCode(), current, target.getStatus(), operatorName);
+        }
+
+        StringBuilder msg = new StringBuilder("成功 ").append(success).append(" 笔");
+        if (!skipReasons.isEmpty()) {
+            int skipTotal = skipReasons.values().stream().mapToInt(Integer::intValue).sum();
+            msg.append("，跳过 ").append(skipTotal).append(" 笔（");
+            msg.append(skipReasons.entrySet().stream()
+                .map(e -> e.getKey() + " " + e.getValue() + " 笔")
+                .collect(Collectors.joining("；")));
+            msg.append("）");
+        }
+        if (success == 0) {
+            throw new ServiceException(msg.toString());
+        }
+        return msg.toString();
+    }
+
+    /**
+     * 跳过原因（给用户看的中文提示）
+     */
+    private String skipReason(String current, PmsFundStatusEnum target) {
+        if (org.dromara.common.core.utils.StringUtils.isBlank(current)) {
+            return "未进入资金状态（申请未审批通过）";
+        }
+        if (PmsFundStatusEnum.NOT_APPLICABLE.getStatus().equals(current)) {
+            return "对公申请不适用报销";
+        }
+        if (PmsFundStatusEnum.REIMBURSED_PAID.getStatus().equals(current)) {
+            return "已汇款完成（终态）";
+        }
+        if (target.getStatus().equals(current)) {
+            return "已是" + target.getDesc();
+        }
+        return "状态不允许该操作";
+    }
+
+    /**
+     * 取操作人昵称快照（取不到时退回登录名）
+     */
+    private String resolveNickName(Long userId) {
+        if (userId == null) {
+            return LoginHelper.getUsername();
+        }
+        SysUser user = userMapper.selectById(userId);
+        return user != null && org.dromara.common.core.utils.StringUtils.isNotBlank(user.getNickName())
+            ? user.getNickName() : LoginHelper.getUsername();
     }
 
     private BigDecimal nvl(BigDecimal v) {

@@ -13,6 +13,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="projectId" column="project_id"/>
         <result property="projectName" column="project_name"/>
         <result property="leader" column="leader"/>
+        <result property="applicantName" column="applicant_name"/>
+        <result property="reimbursementCode" column="reimbursement_code"/>
         <result property="procurementContact" column="procurement_contact"/>
         <result property="paymentScreenshot" column="payment_screenshot"/>
         <result property="quotationUrl" column="quotation_url"/>
@@ -22,6 +24,14 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="purchaseType" column="purchase_type"/>
         <result property="applyReason" column="apply_reason"/>
         <result property="status" column="status"/>
+        <result property="acceptanceStatus" column="acceptance_status"/>
+        <result property="fundStatus" column="fund_status"/>
+        <result property="reimburseDate" column="reimburse_date"/>
+        <result property="reimburseBy" column="reimburse_by"/>
+        <result property="reimburseByName" column="reimburse_by_name"/>
+        <result property="paidDate" column="paid_date"/>
+        <result property="paidBy" column="paid_by"/>
+        <result property="paidByName" column="paid_by_name"/>
         <result property="processInstanceId" column="process_instance_id"/>
         <result property="remark" column="remark"/>
         <result property="createTime" column="create_time"/>
@@ -33,7 +43,11 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             r.*,
             p.project_name,
             p.leader AS leader,
-            (p.budget - COALESCE(p.used_amount, 0)) AS remaining_budget
+            (p.budget - COALESCE(p.used_amount, 0)) AS remaining_budget,
+            (SELECT u.nick_name FROM sys_user u WHERE u.user_id = r.create_by) AS applicant_name,
+            (SELECT rb.reimbursement_code FROM pms_reimbursement rb
+              WHERE rb.request_id = r.id AND rb.del_flag = '0'
+              ORDER BY rb.id DESC LIMIT 1) AS reimbursement_code
         FROM pms_procurement_request r
         LEFT JOIN pms_project p ON r.project_id = p.id AND p.del_flag = '0'
         <where>
@@ -55,6 +69,14 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             </if>
             <if test="bo.titleType != null and bo.titleType != ''">
                 AND r.title_type = #{bo.titleType}
+            </if>
+            <if test="bo.fundStatus != null and bo.fundStatus != ''">
+                AND r.fund_status = #{bo.fundStatus}
+            </if>
+            <if test="bo.applicantName != null and bo.applicantName != ''">
+                AND EXISTS (SELECT 1 FROM sys_user su
+                            WHERE su.user_id = r.create_by
+                              AND su.nick_name LIKE CONCAT('%', #{bo.applicantName}, '%'))
             </if>
             <if test="bo.params.beginCreateTime != null and bo.params.endCreateTime != null">
                 AND r.create_time BETWEEN #{bo.params.beginCreateTime} AND #{bo.params.endCreateTime}

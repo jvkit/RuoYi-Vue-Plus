@@ -12,6 +12,7 @@ import org.dromara.common.mybatis.core.domain.BaseEntity;
 import org.dromara.procurement.domain.PmsProcurementRequest;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -107,6 +108,51 @@ public class PmsProcurementRequestBo extends BaseEntity {
      * 验收标志（none未验收/processing验收中/done已完成验收）
      */
     private String acceptanceStatus;
+
+    /**
+     * 资金状态（列表筛选条件）
+     * <p>
+     * 仅用于查询：状态只能由 /procurement/fund/status 专用接口单向推进，
+     * 新增/编辑接口会显式丢弃该值（见 PmsProcurementRequestServiceImpl#clearFundFields）。
+     */
+    private String fundStatus;
+
+    /**
+     * 申请人姓名（查询条件，模糊匹配 create_by 对应的 sys_user.nick_name）
+     * <p>
+     * 仅用于查询：申请人本身由 create_by 自动填充，不接受前端写入。
+     */
+    private String applicantName;
+
+    /**
+     * 标记已报销时间（系统写入，非表单字段）
+     */
+    private LocalDateTime reimburseDate;
+
+    /**
+     * 标记已报销的操作人ID（系统写入，非表单字段）
+     */
+    private Long reimburseBy;
+
+    /**
+     * 标记已报销的操作人姓名（系统写入，非表单字段）
+     */
+    private String reimburseByName;
+
+    /**
+     * 汇款确认时间（系统写入，非表单字段）
+     */
+    private LocalDateTime paidDate;
+
+    /**
+     * 汇款确认人ID（系统写入，非表单字段）
+     */
+    private Long paidBy;
+
+    /**
+     * 汇款确认人姓名（系统写入，非表单字段）
+     */
+    private String paidByName;
 
     /**
      * 流程实例ID

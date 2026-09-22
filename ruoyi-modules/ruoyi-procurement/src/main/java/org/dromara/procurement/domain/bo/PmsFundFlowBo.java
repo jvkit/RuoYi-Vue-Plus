@@ -90,6 +90,21 @@ public class PmsFundFlowBo extends BaseEntity {
     private String operatorName;
 
     /**
+     * 采购方式（自购/对公），查询筛选 + 系统写入
+     */
+    private String titleType;
+
+    /**
+     * 申请人ID（=谁的钱），系统写入
+     */
+    private Long applicantId;
+
+    /**
+     * 申请人姓名快照，查询支持模糊筛选
+     */
+    private String applicantName;
+
+    /**
      * 备注
      */
     private String remark;
