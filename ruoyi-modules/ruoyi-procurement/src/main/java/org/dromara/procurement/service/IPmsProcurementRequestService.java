@@ -68,11 +68,24 @@ public interface IPmsProcurementRequestService {
     List<PmsProcurementRequestVo> queryAcceptableList();
 
     /**
+     * 查询已验收完成的采购申请（报销下拉用，含申请人昵称）
+     */
+    List<PmsProcurementRequestVo> queryReimbursableList();
+
+    /**
      * 导出采购申请表 Excel（按模板填充）
      *
      * @param id       采购申请ID
      * @param response HTTP响应
      */
     void exportFormExcel(Long id, HttpServletResponse response);
+
+    /**
+     * 生成采购申请表 Excel 字节（按模板填充，报销打包用，不落响应流）
+     *
+     * @param id 采购申请ID
+     * @return Excel 字节数组
+     */
+    byte[] buildFormExcelBytes(Long id);
 
 }

@@ -5,11 +5,16 @@ import lombok.RequiredArgsConstructor;
 import org.dromara.common.core.domain.R;
 import org.dromara.common.mybatis.core.page.PageQuery;
 import org.dromara.common.core.domain.PageResult;
+import org.dromara.common.log.annotation.Log;
+import org.dromara.common.log.enums.BusinessType;
+import org.dromara.common.redis.annotation.RepeatSubmit;
 import org.dromara.common.web.core.BaseController;
 import org.dromara.procurement.domain.PmsInvoiceInfo;
 import org.dromara.procurement.domain.vo.PmsInvoiceInfoViewVo;
 import org.dromara.procurement.service.IPmsInvoiceInfoService;
+import org.dromara.procurement.service.PmsAcceptanceInvoiceService;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -24,6 +29,22 @@ import java.util.List;
 public class PmsInvoiceInfoController extends BaseController {
 
     private final IPmsInvoiceInfoService invoiceInfoService;
+    private final PmsAcceptanceInvoiceService acceptanceInvoiceService;
+
+    /**
+     * 手动上传发票（不走 AI）：把 PDF 挂到某条验收明细并写入台账。
+     * 用于发票台账页「上传发票」弹窗的逐明细手动挂载。
+     */
+    @SaCheckPermission("procurement:invoice:upload")
+    @Log(title = "采购发票台账", businessType = BusinessType.INSERT)
+    @RepeatSubmit(interval = 5000)
+    @PostMapping("/manual-upload")
+    public R<cn.hutool.json.JSONObject> manualUpload(@RequestParam(required = false) Long acceptanceId,
+                                                     @RequestParam(required = false) Long requestId,
+                                                     @RequestParam(required = false) Long acceptanceItemId,
+                                                     @RequestParam("files") List<MultipartFile> files) {
+        return R.ok(acceptanceInvoiceService.manualUpload(acceptanceId, requestId, acceptanceItemId, files));
+    }
 
     /**
      * 查询采购发票台账列表（补充项目名/申请标题/验收单号）

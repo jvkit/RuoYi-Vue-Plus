@@ -20,9 +20,15 @@ import org.dromara.common.web.core.BaseController;
 import org.dromara.procurement.domain.bo.PmsReimbursementBo;
 import org.dromara.procurement.domain.vo.PmsReimbursementVo;
 import org.dromara.procurement.service.IPmsReimbursementService;
+import org.dromara.procurement.service.impl.PmsReimbursementPackService;
+import org.dromara.system.service.ISysOssService;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -39,6 +45,8 @@ import java.util.concurrent.TimeUnit;
 public class PmsReimbursementController extends BaseController {
 
     private final IPmsReimbursementService reimbursementService;
+    private final PmsReimbursementPackService packService;
+    private final ISysOssService sysOssService;
 
     /**
      * 查询报销分页列表
@@ -77,9 +85,44 @@ public class PmsReimbursementController extends BaseController {
     @Log(title = "报销单", businessType = BusinessType.INSERT)
     @RepeatSubmit(interval = 2, timeUnit = TimeUnit.SECONDS, message = "{repeat.submit.message}")
     @PostMapping()
-    public R<Void> add(@RequestBody PmsReimbursementBo bo) {
+    public R<Long> add(@RequestBody PmsReimbursementBo bo) {
         ValidatorUtils.validate(bo, AddGroup.class);
-        return toAjax(reimbursementService.insertByBo(bo));
+        reimbursementService.insertByBo(bo);
+        return R.ok(bo.getId());
+    }
+
+    /**
+     * 生成报销包（Excel + 验收图片 + 发票pdf 打包 ZIP 上传，回写 file_url）
+     */
+    @SaCheckPermission("procurement:reimbursement:edit")
+    @Log(title = "报销单", businessType = BusinessType.UPDATE)
+    @RepeatSubmit(interval = 5, timeUnit = TimeUnit.SECONDS, message = "{repeat.submit.message}")
+    @PostMapping("/generate/{id}")
+    public R<Void> generate(@NotNull(message = "主键不能为空") @PathVariable("id") Long id) {
+        packService.pack(id);
+        return R.ok("报销包已生成");
+    }
+
+    /**
+     * 下载报销包 ZIP（按打包时上传的 MinIO 文件流式回传）
+     */
+    @SaCheckPermission("procurement:reimbursement:export")
+    @Log(title = "报销单", businessType = BusinessType.EXPORT)
+    @GetMapping("/download/{id}")
+    public ResponseEntity<byte[]> download(@NotNull(message = "主键不能为空") @PathVariable("id") Long id) {
+        PmsReimbursementVo vo = reimbursementService.queryById(id);
+        if (vo == null || org.dromara.common.core.utils.StringUtils.isBlank(vo.getFileUrl())) {
+            throw new org.dromara.common.core.exception.ServiceException("该报销记录尚未生成报销包");
+        }
+        Long ossId = packService.resolveOssIdFromUrl(vo.getFileUrl());
+        ResponseEntity<byte[]> resp = sysOssService.download(ossId);
+        String zipName = URLEncoder.encode(
+            (vo.getReimbursementCode() == null ? "报销包" : vo.getReimbursementCode()) + ".zip",
+            StandardCharsets.UTF_8).replace("+", "%20");
+        return ResponseEntity.status(resp.getStatusCode())
+            .header("Content-Disposition", "attachment; filename*=utf-8''" + zipName)
+            .contentType(MediaType.APPLICATION_OCTET_STREAM)
+            .body(resp.getBody());
     }
 
     /**

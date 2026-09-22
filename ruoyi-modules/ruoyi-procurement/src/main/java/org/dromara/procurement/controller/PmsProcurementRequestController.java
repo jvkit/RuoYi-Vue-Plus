@@ -174,6 +174,15 @@ public class PmsProcurementRequestController extends BaseController {
     }
 
     /**
+     * 查询已验收完成的采购申请（报销下拉用）
+     */
+    @SaCheckPermission("procurement:reimbursement:list")
+    @GetMapping("/reimbursableList")
+    public R<List<PmsProcurementRequestVo>> reimbursableList() {
+        return R.ok(requestService.queryReimbursableList());
+    }
+
+    /**
      * 查询已审批通过的「对公」采购申请（合同生成用）
      */
     @SaCheckPermission("procurement:contract:list")

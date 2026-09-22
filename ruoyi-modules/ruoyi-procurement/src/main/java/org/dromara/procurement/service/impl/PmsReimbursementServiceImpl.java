@@ -103,4 +103,14 @@ public class PmsReimbursementServiceImpl implements IPmsReimbursementService {
     public Boolean saveBatch(List<PmsReimbursement> list) {
         return baseMapper.insertBatch(list);
     }
+
+    @Override
+    public PmsReimbursement queryByIdRaw(Long id) {
+        return baseMapper.selectById(id);
+    }
+
+    @Override
+    public Boolean updateByRaw(PmsReimbursement entity) {
+        return baseMapper.updateById(entity) > 0;
+    }
 }

@@ -10,8 +10,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.dromara.common.core.utils.StringUtils;
 import org.dromara.procurement.domain.PmsAcceptance;
+import org.dromara.procurement.domain.PmsAcceptanceItem;
 import org.dromara.procurement.domain.PmsInvoiceInfo;
 import org.dromara.procurement.domain.PmsProcurementRequest;
+import org.dromara.procurement.mapper.PmsAcceptanceItemMapper;
 import org.dromara.procurement.mapper.PmsAcceptanceMapper;
 import org.dromara.procurement.mapper.PmsProcurementRequestMapper;
 import org.dromara.system.domain.SysOssExt;
@@ -44,6 +46,107 @@ public class PmsAcceptanceInvoiceService {
     private final ISysOssService sysOssService;
     private final PmsAcceptanceMapper acceptanceMapper;
     private final PmsProcurementRequestMapper requestMapper;
+    private final PmsAcceptanceItemMapper acceptanceItemMapper;
+
+    /**
+     * 手动上传发票（不走 AI）：直接把 PDF 挂到某条验收明细上并写入台账。
+     *
+     * <p>用于「发票上传」弹窗中用户明确知道某张 PDF 属于哪个商品明细的场景。
+     * 台账来源标记为手工，validFlag=1（用户手工指定，视为有效）。</p>
+     *
+     * @param acceptanceId     验收单 ID（可空，由 requestId 兜底解析）
+     * @param requestId        采购申请 ID
+     * @param acceptanceItemId 验收明细 ID（可空；为空则仅挂订单级）
+     * @param files            发票 PDF 文件
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public JSONObject manualUpload(Long acceptanceId, Long requestId, Long acceptanceItemId, List<MultipartFile> files) {
+        if (files == null || files.isEmpty()) {
+            throw new IllegalArgumentException("请先上传发票 PDF 文件");
+        }
+
+        // 关联解析
+        Long effRequestId = requestId;
+        Long effProjectId = null;
+        Long effAcceptanceId = acceptanceId;
+        if (effAcceptanceId != null) {
+            PmsAcceptance acceptance = acceptanceMapper.selectById(effAcceptanceId);
+            if (acceptance != null) {
+                if (effRequestId == null) {
+                    effRequestId = acceptance.getRequestId();
+                }
+                effProjectId = acceptance.getProjectId();
+            }
+        }
+        if (effRequestId != null) {
+            PmsProcurementRequest request = requestMapper.selectById(effRequestId);
+            if (request != null && effProjectId == null) {
+                effProjectId = request.getProjectId();
+            }
+        }
+
+        // 明细名（用于台账展示）
+        String itemName = null;
+        if (acceptanceItemId != null) {
+            PmsAcceptanceItem item = acceptanceItemMapper.selectById(acceptanceItemId);
+            if (item != null) {
+                itemName = item.getItemName();
+                if (effAcceptanceId == null) {
+                    effAcceptanceId = item.getAcceptanceId();
+                }
+            }
+        }
+
+        JSONArray results = new JSONArray();
+        for (MultipartFile file : files) {
+            if (file == null || file.isEmpty()) {
+                continue;
+            }
+            InvoiceFile invFile;
+            try {
+                invFile = new InvoiceFile(file.getOriginalFilename(), file.getBytes(), file.getContentType());
+            } catch (Exception e) {
+                throw new IllegalStateException("读取发票文件失败: " + file.getOriginalFilename(), e);
+            }
+            SysOssVo oss = uploadToOss(invFile);
+            invFile.ossId = String.valueOf(oss.getOssId());
+            invFile.ossUrl = oss.getUrl();
+
+            PmsInvoiceInfo invoice = new PmsInvoiceInfo();
+            invoice.setAcceptanceId(effAcceptanceId);
+            invoice.setAcceptanceItemId(acceptanceItemId);
+            invoice.setRequestId(effRequestId);
+            invoice.setProjectId(effProjectId);
+            invoice.setPdfUrl(invFile.ossUrl);
+            invoice.setPdfOssId(invFile.ossId);
+            invoice.setMatchedItems(itemName);
+            invoice.setValidFlag(1);
+            invoice.setStatus("submitted");
+            invoice.setVerifyStatus("unverified");
+            invoice.setRedFlag(0);
+            invoice.setRemark("手工上传");
+            invoiceInfoService.saveOrUpdateInvoice(invoice);
+
+            JSONObject row = new JSONObject();
+            row.set("originalName", invFile.filename);
+            row.set("invoiceId", invoice.getId());
+            row.set("ossId", invFile.ossId);
+            row.set("ossUrl", invFile.ossUrl);
+            JSONArray matchedNames = new JSONArray();
+            if (itemName != null) {
+                matchedNames.add(itemName);
+            }
+            row.set("matchedItemNames", matchedNames);
+            row.set("matchStatus", "matched");
+            row.set("persistValidFlag", 1);
+            results.add(row);
+        }
+
+        JSONObject report = new JSONObject();
+        report.set("results", results);
+        report.set("manual", true);
+        return report;
+    }
 
     /**
      * AI 识别发票并持久化到发票台账。

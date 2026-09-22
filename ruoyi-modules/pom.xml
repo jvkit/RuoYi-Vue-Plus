@@ -23,7 +23,7 @@
         <module>ruoyi-workflow</module>
         <module>ruoyi-ai</module>
         <module>ruoyi-procurement</module>
-        <module>ruoyi-invoice</module>
+        <!-- ruoyi-invoice 已停用：老发票模块与采购发票台账共用 invoice_info 表，入口合并到「采购管理/发票台账」 -->
     </modules>
 
 </project>

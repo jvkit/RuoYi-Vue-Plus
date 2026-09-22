@@ -29,6 +29,11 @@ public interface PmsProcurementRequestMapper extends BaseMapperPlus<PmsProcureme
     List<PmsProcurementRequestVo> selectAcceptableList();
 
     /**
+     * 查询已验收完成的采购申请列表（关联项目 + 申请人昵称，报销下拉用）
+     */
+    List<PmsProcurementRequestVo> selectReimbursableList();
+
+    /**
      * 资金状态看板：按 fund_status 统计已审批通过申请的笔数与金额合计（催办用）
      * <p>
      * 只统计 status='finish' 的申请；未进入资金状态（fund_status 为空）的不出现在结果里，

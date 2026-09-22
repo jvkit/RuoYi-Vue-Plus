@@ -268,6 +268,14 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
         return list;
     }
 
+    /**
+     * 已验收完成的采购申请（报销下拉用）
+     */
+    @Override
+    public List<PmsProcurementRequestVo> queryReimbursableList() {
+        return baseMapper.selectReimbursableList();
+    }
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public PmsProcurementRequestVo submitAndStartFlow(PmsProcurementRequestBo bo) {
@@ -583,6 +591,31 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
         if (ObjectUtil.isNull(vo)) {
             throw new ServiceException("采购申请不存在");
         }
+        byte[] bytes = buildFormExcelBytes(id);
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        String title = StringUtils.isNotBlank(vo.getTitle()) ? vo.getTitle() : vo.getRequestCode();
+        // 文件名 = 标题 + .xlsx，同名时追加三位序数避免重复
+        String filename = dedupFileName(title + ".xlsx");
+        String encoded = URLEncoder.encode(filename, StandardCharsets.UTF_8);
+        response.setHeader("Content-Disposition", "attachment; filename=\"" + encoded + "\"; filename*=UTF-8''" + encoded);
+        try (OutputStream os = response.getOutputStream()) {
+            os.write(bytes);
+            os.flush();
+        } catch (IOException e) {
+            log.error("导出采购申请表失败", e);
+            throw new ServiceException("导出采购申请表失败：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 生成采购申请表 Excel 字节（按模板填充，报销打包复用）
+     */
+    @Override
+    public byte[] buildFormExcelBytes(Long id) {
+        PmsProcurementRequestVo vo = queryById(id);
+        if (ObjectUtil.isNull(vo)) {
+            throw new ServiceException("采购申请不存在");
+        }
         try {
             ClassPathResource tpl = new ClassPathResource("templates/最终模板.xlsx");
             try (Workbook wb = WorkbookFactory.create(tpl.getInputStream())) {
@@ -678,20 +711,14 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
                     }
                 }
 
-                response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-                String title = StringUtils.isNotBlank(vo.getTitle()) ? vo.getTitle() : vo.getRequestCode();
-                // 文件名 = 标题 + .xlsx，同名时追加三位序数避免重复
-                String filename = dedupFileName(title + ".xlsx");
-                String encoded = URLEncoder.encode(filename, StandardCharsets.UTF_8);
-                response.setHeader("Content-Disposition", "attachment; filename=\"" + encoded + "\"; filename*=UTF-8''" + encoded);
-                try (OutputStream os = response.getOutputStream()) {
-                    wb.write(os);
-                    os.flush();
+                try (java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream()) {
+                    wb.write(bos);
+                    return bos.toByteArray();
                 }
             }
         } catch (IOException e) {
-            log.error("导出采购申请表失败", e);
-            throw new ServiceException("导出采购申请表失败：" + e.getMessage());
+            log.error("生成采购申请表 Excel 失败", e);
+            throw new ServiceException("生成采购申请表失败：" + e.getMessage());
         }
     }
 

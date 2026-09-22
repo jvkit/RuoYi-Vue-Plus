@@ -50,4 +50,14 @@ public interface IPmsReimbursementService {
      * 批量保存
      */
     Boolean saveBatch(List<PmsReimbursement> list);
+
+    /**
+     * 按主键查询原始实体（供报销打包等内部流程使用，不走 VO 映射）
+     */
+    PmsReimbursement queryByIdRaw(Long id);
+
+    /**
+     * 按主键更新原始实体（供报销打包回写 file_url/status/content_json 使用）
+     */
+    Boolean updateByRaw(PmsReimbursement entity);
 }

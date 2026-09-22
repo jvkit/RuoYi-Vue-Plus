@@ -110,11 +110,7 @@
             <artifactId>ruoyi-procurement</artifactId>
         </dependency>
 
-        <!--  发票管理模块  -->
-        <dependency>
-            <groupId>org.dromara</groupId>
-            <artifactId>ruoyi-invoice</artifactId>
-        </dependency>
+        <!--  发票管理模块已停用（入口合并到采购管理/发票台账，共用 invoice_info 表）  -->
 
         <!-- Spring Boot Admin 客户端 -->
         <dependency>

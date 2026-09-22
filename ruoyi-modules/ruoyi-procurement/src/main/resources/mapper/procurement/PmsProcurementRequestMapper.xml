@@ -99,4 +99,20 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         ORDER BY r.create_time DESC
     </select>
 
+    <select id="selectReimbursableList" resultMap="PmsProcurementRequestResult">
+        SELECT
+            r.*,
+            p.project_name,
+            p.leader AS leader,
+            u.nick_name AS applicant_name,
+            (p.budget - COALESCE(p.used_amount, 0)) AS remaining_budget
+        FROM pms_procurement_request r
+        LEFT JOIN pms_project p ON r.project_id = p.id AND p.del_flag = '0'
+        LEFT JOIN sys_user u ON r.create_by = u.user_id AND u.del_flag = '0'
+        WHERE r.del_flag = '0'
+          AND r.status = 'finish'
+          AND r.acceptance_status = 'done'
+        ORDER BY r.create_time DESC
+    </select>
+
 </mapper>
