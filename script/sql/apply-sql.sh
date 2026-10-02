@@ -53,7 +53,8 @@ for sql_file in "${SQL_FILES[@]}"; do
   log "执行: $filename"
   if "${MYSQL_CMD[@]}" --default-character-set=utf8mb4 "$DB_NAME" < "$sql_file"; then
     echo "$filename" >> "$APPLIED_LOG"
-    ((RUN_COUNT++))
+    # 注意：不能用 ((RUN_COUNT++))，set -e 下 RUN_COUNT=0 时算术后置自增返回 1 会误杀脚本
+    RUN_COUNT=$((RUN_COUNT + 1))
     log "完成: $filename"
   else
     die "执行失败: $filename"
