@@ -10,6 +10,7 @@ import org.dromara.common.core.utils.StringUtils;
 import org.dromara.procurement.domain.PmsReserveAccount;
 import org.dromara.procurement.domain.bo.PmsReserveAccountBo;
 import org.dromara.procurement.domain.vo.PmsReserveAccountVo;
+import org.dromara.procurement.domain.vo.PmsReserveOptionVo;
 import org.dromara.procurement.domain.vo.PmsReserveStatVo;
 import org.dromara.procurement.domain.vo.PmsReserveSummaryVo;
 import org.dromara.procurement.domain.vo.PmsUserOptionVo;
@@ -55,6 +56,7 @@ public class PmsReserveAccountServiceImpl implements IPmsReserveAccountService {
     private final PmsReserveAccountMapper baseMapper;
     private final SysUserMapper userMapper;
     private final ISysConfigService configService;
+    private final org.dromara.procurement.mapper.PmsFundFlowMapper fundFlowMapper;
 
     @Override
     public List<PmsReserveAccountVo> queryList() {
@@ -132,30 +134,31 @@ public class PmsReserveAccountServiceImpl implements IPmsReserveAccountService {
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
-    public PmsReserveAccountVo ensureAccount(Long personId) {
-        if (ObjectUtil.isNull(personId)) {
-            return null;
+    public List<PmsReserveOptionVo> queryOptions() {
+        return queryList().stream().map(a -> {
+            PmsReserveOptionVo vo = new PmsReserveOptionVo();
+            vo.setPersonId(a.getPersonId());
+            vo.setPersonName(a.getPersonName());
+            vo.setQuota(a.getQuota());
+            vo.setOccupied(a.getOccupied());
+            vo.setAvailable(a.getAvailable());
+            return vo;
+        }).toList();
+    }
+
+    /**
+     * 可用额度 = 账户额度 − 流水占用；无账户视为 0（账户只能由管理员手动添加，不自动建档）
+     */
+    @Override
+    public java.math.BigDecimal availableAmount(Long personId) {
+        if (personId == null) {
+            return BigDecimal.ZERO;
         }
-        PmsReserveAccount exist = selectByPersonId(personId);
-        if (ObjectUtil.isNotNull(exist)) {
-            return baseMapper.selectVoById(exist.getId());
+        PmsReserveAccount account = selectByPersonId(personId);
+        if (account == null || account.getQuota() == null) {
+            return BigDecimal.ZERO;
         }
-        PmsReserveAccount add = new PmsReserveAccount();
-        add.setPersonId(personId);
-        add.setPersonName(selectNickName(personId));
-        add.setQuota(defaultQuota());
-        add.setRemark("提交自购申请时自动创建");
-        try {
-            baseMapper.insert(add);
-            log.info("备用金账户已自动创建：personId={}, quota={}", personId, add.getQuota());
-        } catch (Exception e) {
-            // 并发提交时可能重复插入（本表无唯一索引，靠先查后插），失败不影响采购主流程
-            log.warn("备用金账户自动创建失败（忽略，不阻断采购提交）：personId={}, msg={}", personId, e.getMessage());
-            PmsReserveAccount retry = selectByPersonId(personId);
-            return retry == null ? null : baseMapper.selectVoById(retry.getId());
-        }
-        return baseMapper.selectVoById(add.getId());
+        return account.getQuota().subtract(nvl(fundFlowMapper.sumOccupiedByPerson(personId)));
     }
 
     @Override

@@ -52,6 +52,17 @@ public interface IPmsProjectService {
     Boolean deleteWithValidByIds(Collection<Long> ids, Boolean isValid);
 
     /**
+     * 自底向上同步祖先节点金额：自 nodeId 的父级起逐级将 budget/used_amount 重算为直接子级之和
+     * （项目增删改、申请审批累加/回滚已用后调用）
+     */
+    void syncAncestors(Long nodeId);
+
+    /**
+     * 全量重算所有父级节点金额（资金重建等兜底场景）
+     */
+    void recomputeAllParentAmounts();
+
+    /**
      * 批量保存
      */
     Boolean saveBatch(List<PmsProject> list);

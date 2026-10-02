@@ -28,6 +28,7 @@ import org.dromara.procurement.mapper.PmsWarehouseStockMapper;
 import org.dromara.procurement.service.IPmsIssueRequestService;
 import org.dromara.workflow.api.WorkflowService;
 import org.dromara.workflow.api.domain.StartProcessDTO;
+import org.dromara.workflow.api.domain.FlowInstanceBizExtDTO;
 import org.dromara.workflow.api.event.ProcessEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
@@ -239,6 +240,12 @@ public class PmsIssueRequestServiceImpl implements IPmsIssueRequestService {
         StartProcessDTO startProcess = new StartProcessDTO();
         startProcess.setBusinessId(entity.getId().toString());
         startProcess.setFlowCode("pms_issue_request");
+        // 业务标题写入流程实例扩展：待办/已办列表「业务标题」列靠它显示
+        FlowInstanceBizExtDTO bizExt = new FlowInstanceBizExtDTO();
+        bizExt.setBusinessId(entity.getId().toString());
+        bizExt.setBusinessCode(entity.getIssueCode());
+        bizExt.setBusinessTitle(entity.getIssueCode());
+        startProcess.setBizExt(bizExt);
         startProcess.setVariables(new HashMap<>());
         startProcess.getVariables().put("leaderId", leaderId.toString());
         boolean started = workflowService.startCompleteTask(startProcess);

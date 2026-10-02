@@ -59,6 +59,21 @@ public class PmsProcurementRequestBo extends BaseEntity {
     private String titleName;
 
     /**
+     * 备用金人+扣款顺序JSON：[{"personId":1,"personName":"x"},...]（自购多人备用金用，非必填）
+     */
+    private String reservePeopleJson;
+
+    /**
+     * 使用人ID（系统选人，非必填）
+     */
+    private Long useUserId;
+
+    /**
+     * 使用人姓名（非必填）
+     */
+    private String useUserName;
+
+    /**
      * 项目ID
      */
     @NotNull(message = "项目不能为空", groups = {AddGroup.class, EditGroup.class})

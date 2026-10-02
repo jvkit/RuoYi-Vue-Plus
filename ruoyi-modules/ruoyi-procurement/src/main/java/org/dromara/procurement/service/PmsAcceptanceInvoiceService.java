@@ -6,6 +6,8 @@ import cn.hutool.core.date.DateUtil;
 import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.dromara.common.core.utils.StringUtils;
@@ -26,7 +28,10 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.File;
 import java.math.BigDecimal;
 import java.nio.file.Files;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.List;
 
 /**
@@ -97,6 +102,23 @@ public class PmsAcceptanceInvoiceService {
             }
         }
 
+        // 手动挂载也按「{序号}_{商品名}_发票.pdf」重命名 OSS 文件名（与 AI 匹配建议名同规则）
+        String manualBaseName = null;
+        if (acceptanceItemId != null && effAcceptanceId != null) {
+            List<PmsAcceptanceItem> accItems = acceptanceItemMapper.selectList(
+                Wrappers.<PmsAcceptanceItem>lambdaQuery()
+                    .eq(PmsAcceptanceItem::getAcceptanceId, effAcceptanceId)
+                    .orderByAsc(PmsAcceptanceItem::getId));
+            for (int i = 0; i < accItems.size(); i++) {
+                if (acceptanceItemId.equals(accItems.get(i).getId())
+                    && StringUtils.isNotBlank(accItems.get(i).getItemName())) {
+                    manualBaseName = sanitizeFileName(
+                        (i + 1) + "_" + accItems.get(i).getItemName() + "_发票.pdf");
+                    break;
+                }
+            }
+        }
+
         JSONArray results = new JSONArray();
         for (MultipartFile file : files) {
             if (file == null || file.isEmpty()) {
@@ -107,6 +129,9 @@ public class PmsAcceptanceInvoiceService {
                 invFile = new InvoiceFile(file.getOriginalFilename(), file.getBytes(), file.getContentType());
             } catch (Exception e) {
                 throw new IllegalStateException("读取发票文件失败: " + file.getOriginalFilename(), e);
+            }
+            if (manualBaseName != null) {
+                invFile.filename = manualBaseName;
             }
             SysOssVo oss = uploadToOss(invFile);
             invFile.ossId = String.valueOf(oss.getOssId());
@@ -224,6 +249,17 @@ public class PmsAcceptanceInvoiceService {
         Long finalProjectId = effProjectId;
 
         // 5. 持久化发票信息并回填结果
+        // 申请明细 id → 验收明细 id 映射（AI 返回的 matchedItemIds 是申请明细 id，台账覆盖度按验收明细统计）
+        Map<Long, Long> requestItemToAccItem = new HashMap<>();
+        if (acceptanceId != null) {
+            List<PmsAcceptanceItem> accItems = acceptanceItemMapper.selectList(
+                Wrappers.<PmsAcceptanceItem>lambdaQuery().eq(PmsAcceptanceItem::getAcceptanceId, acceptanceId));
+            for (PmsAcceptanceItem ai : accItems) {
+                if (ai.getRequestItemId() != null) {
+                    requestItemToAccItem.put(ai.getRequestItemId(), ai.getId());
+                }
+            }
+        }
         JSONArray results = agentsResult.getJSONArray("results");
         if (results != null) {
             for (int i = 0; i < results.size(); i++) {
@@ -231,6 +267,19 @@ public class PmsAcceptanceInvoiceService {
                 String originalName = result.getStr("originalName");
                 InvoiceFile invFile = findByName(invoiceFiles, originalName);
                 PmsInvoiceInfo invoice = buildInvoiceInfo(result, acceptanceId, finalRequestId, finalProjectId, invFile);
+                // 匹配命中时回填验收明细 id（多张命中取第一张，invoice_info 只有一个 acceptance_item_id 列）
+                if (invoice.getAcceptanceItemId() == null && requestItemToAccItem.size() > 0) {
+                    JSONArray mids = result.getJSONArray("matchedItemIds");
+                    if (mids != null) {
+                        for (Object m : mids) {
+                            Long accItemId = requestItemToAccItem.get(Long.valueOf(m.toString()));
+                            if (accItemId != null) {
+                                invoice.setAcceptanceItemId(accItemId);
+                                break;
+                            }
+                        }
+                    }
+                }
 
                 // 重复检测：只与「有效」发票比较
                 if (Boolean.TRUE.equals(invoice.getValidFlag())) {
@@ -255,7 +304,71 @@ public class PmsAcceptanceInvoiceService {
             }
         }
 
+        // 6. 识别报告沉淀到验收单 ai_detail（按轮次追加 JSON 数组，失败不影响主流程）
+        appendAiDetail(acceptanceId, agentsResult);
+
         return agentsResult;
+    }
+
+    /**
+     * 把本轮 AI 识别报告摘要追加写入验收单 ai_detail（JSON 数组字符串，一轮一条）。
+     *
+     * @param acceptanceId 验收单 ID（新增草稿未落库时为空，直接跳过）
+     * @param agentsResult agents 返回的匹配报告（含 traceId/summary/results）
+     */
+    private void appendAiDetail(Long acceptanceId, JSONObject agentsResult) {
+        if (acceptanceId == null || agentsResult == null) {
+            return;
+        }
+        try {
+            PmsAcceptance acceptance = acceptanceMapper.selectById(acceptanceId);
+            if (acceptance == null) {
+                return;
+            }
+            JSONArray rounds;
+            String old = acceptance.getAiDetail();
+            if (StringUtils.isNotBlank(old)) {
+                try {
+                    rounds = JSONUtil.parseArray(old);
+                } catch (Exception e) {
+                    log.warn("验收单 ai_detail 不是合法 JSON 数组，重新起记: acceptanceId={}", acceptanceId);
+                    rounds = new JSONArray();
+                }
+            } else {
+                rounds = new JSONArray();
+            }
+
+            JSONObject round = new JSONObject();
+            round.set("time", LocalDateTime.now().toString());
+            round.set("traceId", agentsResult.getStr("traceId"));
+            round.set("summary", agentsResult.getJSONObject("summary"));
+            JSONArray briefs = new JSONArray();
+            JSONArray results = agentsResult.getJSONArray("results");
+            if (results != null) {
+                for (int i = 0; i < results.size(); i++) {
+                    JSONObject r = results.getJSONObject(i);
+                    if (r == null) {
+                        continue;
+                    }
+                    JSONObject brief = new JSONObject();
+                    brief.set("originalName", r.getStr("originalName"));
+                    brief.set("matchStatus", r.getStr("matchStatus"));
+                    brief.set("matchedItemNames", r.getJSONArray("matchedItemNames"));
+                    brief.set("invalidReason", r.getStr("invalidReason"));
+                    brief.set("aiConfidence", r.getObj("aiConfidence"));
+                    briefs.add(brief);
+                }
+            }
+            round.set("results", briefs);
+            rounds.add(round);
+
+            LambdaUpdateWrapper<PmsAcceptance> uw = Wrappers.lambdaUpdate();
+            uw.eq(PmsAcceptance::getId, acceptanceId)
+                .set(PmsAcceptance::getAiDetail, rounds.toString());
+            acceptanceMapper.update(null, uw);
+        } catch (Exception e) {
+            log.error("写入验收单 ai_detail 留痕失败: acceptanceId={}", acceptanceId, e);
+        }
     }
 
     private SysOssVo uploadToOss(InvoiceFile invFile) {
@@ -361,8 +474,19 @@ public class PmsAcceptanceInvoiceService {
         }
     }
 
+    /**
+     * 过滤文件名非法字符（/\:*?"&lt;&gt;|），并把连续空白折叠为单个空格
+     */
+    private String sanitizeFileName(String name) {
+        if (name == null) {
+            return null;
+        }
+        String cleaned = name.replaceAll("[\\\\/:*?\"<>|]", "_").replaceAll("\\s+", " ").trim();
+        return cleaned.isEmpty() ? null : cleaned;
+    }
+
     private static class InvoiceFile {
-        final String filename;
+        String filename;
         final byte[] bytes;
         final String contentType;
         String ossId;

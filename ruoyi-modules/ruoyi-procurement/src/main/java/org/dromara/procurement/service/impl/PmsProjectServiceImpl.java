@@ -14,7 +14,6 @@ import org.dromara.procurement.domain.bo.PmsProjectBo;
 import org.dromara.procurement.domain.vo.PmsProjectVo;
 import org.dromara.procurement.mapper.PmsProjectMapper;
 import org.dromara.procurement.service.IPmsProjectService;
-import org.dromara.system.api.DeptService;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -35,19 +34,17 @@ import java.util.Map;
 public class PmsProjectServiceImpl implements IPmsProjectService {
 
     private final PmsProjectMapper baseMapper;
-    private final DeptService deptService;
+    private final PmsFundSourceServiceImpl fundSourceService;
 
     /**
-     * 批量填充归属部门名称
+     * 批量填充归属名称
      */
-    private void fillDeptName(List<PmsProjectVo> list) {
+    private void fillOwnerName(List<PmsProjectVo> list) {
         if (list == null || list.isEmpty()) {
             return;
         }
         for (PmsProjectVo vo : list) {
-            if (vo.getDeptId() != null) {
-                vo.setDeptName(deptService.selectDeptNameByIds(vo.getDeptId().toString()));
-            }
+            vo.setOwnerName(fundSourceService.selectNameById(vo.getOwnerId()));
         }
     }
 
@@ -55,7 +52,7 @@ public class PmsProjectServiceImpl implements IPmsProjectService {
     public PmsProjectVo queryById(Long id) {
         PmsProjectVo vo = baseMapper.selectVoById(id);
         if (vo != null) {
-            fillDeptName(List.of(vo));
+            fillOwnerName(List.of(vo));
         }
         return vo;
     }
@@ -64,14 +61,14 @@ public class PmsProjectServiceImpl implements IPmsProjectService {
     public PageResult<PmsProjectVo> queryPageList(PmsProjectBo bo, PageQuery pageQuery) {
         LambdaQueryWrapper<PmsProject> lqw = buildQueryWrapper(bo);
         Page<PmsProjectVo> result = baseMapper.selectVoPage(pageQuery.build(), lqw);
-        fillDeptName(result.getRecords());
+        fillOwnerName(result.getRecords());
         return PageResult.build(result.getRecords(), result.getTotal());
     }
 
     @Override
     public List<PmsProjectVo> queryList(PmsProjectBo bo) {
         List<PmsProjectVo> list = baseMapper.selectVoList(buildQueryWrapper(bo));
-        fillDeptName(list);
+        fillOwnerName(list);
         return list;
     }
 
@@ -93,7 +90,7 @@ public class PmsProjectServiceImpl implements IPmsProjectService {
         List<PmsProjectVo> all = baseMapper.selectVoList(
             Wrappers.<PmsProject>lambdaQuery()
                 .orderByAsc(PmsProject::getProjectCode));
-        fillDeptName(all);
+        fillOwnerName(all);
         return buildTree(all, 0L);
     }
 
@@ -117,11 +114,11 @@ public class PmsProjectServiceImpl implements IPmsProjectService {
         if (StringUtils.isBlank(bo.getProjectCode())) {
             bo.setProjectCode(generateProjectCode());
         }
-        // 子项目归属部门默认继承父项目
-        if (bo.getParentId() != null && bo.getParentId() != 0 && bo.getDeptId() == null) {
+        // 子项目归属默认继承父项目
+        if (bo.getParentId() != null && bo.getParentId() != 0 && bo.getOwnerId() == null) {
             PmsProject parent = baseMapper.selectById(bo.getParentId());
             if (parent != null) {
-                bo.setDeptId(parent.getDeptId());
+                bo.setOwnerId(parent.getOwnerId());
             }
         }
         PmsProject add = MapstructUtils.convert(bo, PmsProject.class);
@@ -129,6 +126,7 @@ public class PmsProjectServiceImpl implements IPmsProjectService {
         boolean flag = baseMapper.insert(add) > 0;
         if (flag) {
             bo.setId(add.getId());
+            syncAncestors(add.getId());
         }
         return flag;
     }
@@ -137,7 +135,11 @@ public class PmsProjectServiceImpl implements IPmsProjectService {
     public Boolean updateByBo(PmsProjectBo bo) {
         PmsProject update = MapstructUtils.convert(bo, PmsProject.class);
         validEntityBeforeSave(update);
-        return baseMapper.updateById(update) > 0;
+        boolean flag = baseMapper.updateById(update) > 0;
+        if (flag) {
+            syncAncestors(update.getId());
+        }
+        return flag;
     }
 
     /**
@@ -152,28 +154,11 @@ public class PmsProjectServiceImpl implements IPmsProjectService {
         if (baseMapper.selectCount(lqw) > 0) {
             throw new ServiceException("项目编码已存在");
         }
-        // 子项目预算不得超过父项目剩余预算
+        // 上级项目必须存在（父级金额由子级之和自动同步，不再做"子预算不得超父剩余"校验）
         if (entity.getParentId() != null && entity.getParentId() != 0) {
             PmsProject parent = baseMapper.selectById(entity.getParentId());
             if (parent == null) {
                 throw new ServiceException("上级项目不存在");
-            }
-            BigDecimal budget = entity.getBudget() == null ? BigDecimal.ZERO : entity.getBudget();
-            BigDecimal parentBudget = parent.getBudget() == null ? BigDecimal.ZERO : parent.getBudget();
-            BigDecimal parentUsed = parent.getUsedAmount() == null ? BigDecimal.ZERO : parent.getUsedAmount();
-            // 父项目剩余 = 父预算 - 父已用 - 其他子项目预算之和
-            LambdaQueryWrapper<PmsProject> siblings = Wrappers.lambdaQuery();
-            siblings.eq(PmsProject::getParentId, entity.getParentId());
-            if (entity.getId() != null) {
-                siblings.ne(PmsProject::getId, entity.getId());
-            }
-            BigDecimal siblingBudget = baseMapper.selectList(siblings).stream()
-                .map(s -> s.getBudget() == null ? BigDecimal.ZERO : s.getBudget())
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-            BigDecimal parentRemaining = parentBudget.subtract(parentUsed).subtract(siblingBudget);
-            if (budget.compareTo(parentRemaining) > 0) {
-                throw new ServiceException("子项目预算不能超过父项目剩余预算（父剩余 "
-                    + parentRemaining.stripTrailingZeros().toPlainString() + " 元）");
             }
         }
     }
@@ -198,7 +183,75 @@ public class PmsProjectServiceImpl implements IPmsProjectService {
                 throw new ServiceException("存在二级项目，不能删除该主项目");
             }
         }
-        return baseMapper.deleteByIds(ids) > 0;
+        // 先记录父级，删除后自底向上同步
+        List<Long> parentIds = ids.stream()
+            .map(id -> {
+                PmsProject p = baseMapper.selectById(id);
+                return p == null ? null : p.getParentId();
+            })
+            .filter(pid -> pid != null && pid != 0)
+            .distinct()
+            .collect(java.util.stream.Collectors.toList());
+        boolean flag = baseMapper.deleteByIds(ids) > 0;
+        if (flag) {
+            parentIds.forEach(this::syncAncestors);
+        }
+        return flag;
+    }
+
+    @Override
+    public void syncAncestors(Long nodeId) {
+        if (nodeId == null) {
+            return;
+        }
+        PmsProject node = baseMapper.selectById(nodeId);
+        Long pid = node == null ? null : node.getParentId();
+        while (pid != null && pid != 0) {
+            PmsProject parent = baseMapper.selectById(pid);
+            if (parent == null) {
+                break;
+            }
+            List<PmsProject> children = baseMapper.selectList(
+                Wrappers.<PmsProject>lambdaQuery().eq(PmsProject::getParentId, pid));
+            BigDecimal budget = children.stream()
+                .map(c -> c.getBudget() == null ? BigDecimal.ZERO : c.getBudget())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal used = children.stream()
+                .map(c -> c.getUsedAmount() == null ? BigDecimal.ZERO : c.getUsedAmount())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            PmsProject upd = new PmsProject();
+            upd.setId(pid);
+            upd.setBudget(budget);
+            upd.setUsedAmount(used);
+            baseMapper.updateById(upd);
+            pid = parent.getParentId();
+        }
+    }
+
+    @Override
+    public void recomputeAllParentAmounts() {
+        List<PmsProject> all = baseMapper.selectList(Wrappers.lambdaQuery());
+        if (all.isEmpty()) {
+            return;
+        }
+        Map<Long, PmsProject> byId = new java.util.HashMap<>();
+        all.forEach(p -> byId.put(p.getId(), p));
+        // 单次遍历即可：childrenMap 持有 all 中同一对象引用，父级更新后祖父级读取到的即为新值
+        all.stream()
+            .filter(p -> p.getParentId() != null && p.getParentId() != 0 && byId.containsKey(p.getParentId()))
+            .collect(java.util.stream.Collectors.groupingBy(PmsProject::getParentId))
+            .forEach((parentId, children) -> {
+                PmsProject parent = byId.get(parentId);
+                BigDecimal budget = children.stream()
+                    .map(c -> c.getBudget() == null ? BigDecimal.ZERO : c.getBudget())
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+                BigDecimal used = children.stream()
+                    .map(c -> c.getUsedAmount() == null ? BigDecimal.ZERO : c.getUsedAmount())
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+                parent.setBudget(budget);
+                parent.setUsedAmount(used);
+                baseMapper.updateById(parent);
+            });
     }
 
     @Override

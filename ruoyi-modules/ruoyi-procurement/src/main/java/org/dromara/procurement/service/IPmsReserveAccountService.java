@@ -2,6 +2,7 @@ package org.dromara.procurement.service;
 
 import org.dromara.procurement.domain.bo.PmsReserveAccountBo;
 import org.dromara.procurement.domain.vo.PmsReserveAccountVo;
+import org.dromara.procurement.domain.vo.PmsReserveOptionVo;
 import org.dromara.procurement.domain.vo.PmsReserveSummaryVo;
 import org.dromara.procurement.domain.vo.PmsUserOptionVo;
 
@@ -40,14 +41,22 @@ public interface IPmsReserveAccountService {
     Boolean deleteById(Long id);
 
     /**
-     * 确保某用户拥有备用金账户（懒创建，供采购申请提交时调用）
+     * 某人当前可用备用金额度（= 账户额度 - 按人占用聚合）
      * <p>
-     * 已存在则直接返回，不覆盖管理员配置过的额度。
+     * 占用以资金流水 applicant_id 聚合（多人拆账口径）：采购流水看关联申请的资金状态，
+     * 人工流水看自身 fund_status；无账户视为 0（账户只能由管理员手动添加，不自动开户）。
      *
-     * @param personId 用户ID
-     * @return 账户（新建或已有）
+     * @param personId 备用金人（出纳人）ID
+     * @return 可用额度（无账户返回 0）
      */
-    PmsReserveAccountVo ensureAccount(Long personId);
+    java.math.BigDecimal availableAmount(Long personId);
+
+    /**
+     * 备用金平铺选项（登录即可读，采购申请表单备用金卡片用）
+     * <p>
+     * 与账户列表同口径实时聚合 occupied / available，只暴露表单需要的平铺字段。
+     */
+    List<PmsReserveOptionVo> queryOptions();
 
     /**
      * 选人下拉（未删除的正常用户）

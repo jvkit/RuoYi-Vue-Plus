@@ -111,6 +111,11 @@ public class PmsFundFlowVo implements Serializable {
     private String applicantName;
 
     /**
+     * 资金状态（仅人工备用金流水有值：purchased_unreimbursed/reimbursed_unpaid/reimbursed_paid）
+     */
+    private String fundStatus;
+
+    /**
      * 备注
      */
     @ExcelProperty(value = "备注")

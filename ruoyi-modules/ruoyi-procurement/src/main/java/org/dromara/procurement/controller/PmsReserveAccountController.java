@@ -10,6 +10,7 @@ import org.dromara.common.log.enums.BusinessType;
 import org.dromara.common.web.core.BaseController;
 import org.dromara.procurement.domain.bo.PmsReserveAccountBo;
 import org.dromara.procurement.domain.vo.PmsReserveAccountVo;
+import org.dromara.procurement.domain.vo.PmsReserveOptionVo;
 import org.dromara.procurement.domain.vo.PmsReserveSummaryVo;
 import org.dromara.procurement.domain.vo.PmsUserOptionVo;
 import org.dromara.procurement.service.IPmsReserveAccountService;
@@ -28,7 +29,8 @@ import java.util.List;
 /**
  * 备用金额度账户Controller
  * <p>
- * 权限沿用资金管理：查看用 procurement:fund:list，配置额度用 procurement:fund:quota。
+ * 权限沿用资金管理：查看用 procurement:fund:list，配置额度用 procurement:fund:quota；
+ * /options 与 /userOptions 不加权限（登录即可），供普通用户填采购申请时读取。
  *
  * @author procurement
  */
@@ -59,9 +61,19 @@ public class PmsReserveAccountController extends BaseController {
     }
 
     /**
-     * 选人下拉（新增备用金账户用）
+     * 备用金平铺选项（登录即可，采购申请表单备用金卡片用）
+     * <p>
+     * 不加权限注解：普通用户（common_user 角色）填采购申请时需要看到各备用金人的
+     * 额度/占用/可用，与拆账口径一致（按流水 applicant_id 实时聚合）。
      */
-    @SaCheckPermission("procurement:fund:list")
+    @GetMapping("/options")
+    public R<List<PmsReserveOptionVo>> options() {
+        return R.ok(reserveAccountService.queryOptions());
+    }
+
+    /**
+     * 选人下拉（新增备用金账户 / 采购申请表单「使用人」下拉共用，登录即可）
+     */
     @GetMapping("/userOptions")
     public R<List<PmsUserOptionVo>> userOptions() {
         return R.ok(reserveAccountService.userOptions());

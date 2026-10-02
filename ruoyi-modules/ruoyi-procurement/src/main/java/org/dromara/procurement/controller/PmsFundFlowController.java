@@ -12,6 +12,8 @@ import org.dromara.common.core.domain.PageResult;
 import org.dromara.common.web.core.BaseController;
 import org.dromara.procurement.domain.bo.PmsFundFlowBo;
 import org.dromara.procurement.domain.bo.PmsFundStatusBo;
+import org.dromara.procurement.domain.bo.PmsManualFundFlowBo;
+import org.dromara.procurement.domain.bo.PmsManualFundStatusBo;
 import org.dromara.procurement.domain.vo.PmsFundFlowVo;
 import org.dromara.procurement.domain.vo.PmsFundStatusBoardVo;
 import org.dromara.procurement.domain.vo.PmsFundSummaryVo;
@@ -108,5 +110,30 @@ public class PmsFundFlowController extends BaseController {
     @PutMapping("/status")
     public R<Void> changeStatus(@Validated @RequestBody PmsFundStatusBo bo) {
         return R.ok(fundFlowService.changeFundStatus(bo));
+    }
+
+    /**
+     * 人工登记资金流水（非采购订单的资金消耗）
+     * <p>
+     * 自购：按 payers 顺序拆账，每人一条流水（fund_status=已采购未报销）；
+     * 对公：一条流水（fund_status=null）。项目 used_amount 按总额一次累加。
+     */
+    @SaCheckPermission("procurement:fund:manual")
+    @Log(title = "资金流水", businessType = BusinessType.INSERT)
+    @PostMapping("/manual")
+    public R<List<PmsFundFlowVo>> manual(@Validated @RequestBody PmsManualFundFlowBo bo) {
+        return R.ok(fundFlowService.createManualFlow(bo));
+    }
+
+    /**
+     * 人工流水资金状态推进（仅人工登记的备用金流水可操作，单向、幂等）
+     */
+    @SaCheckPermission("procurement:fund:manual")
+    @Log(title = "资金流水", businessType = BusinessType.UPDATE)
+    @PutMapping("/manual/{id}/fundStatus")
+    public R<Void> changeManualStatus(@PathVariable Long id,
+                                      @Validated @RequestBody PmsManualFundStatusBo bo) {
+        fundFlowService.changeManualFundStatus(id, bo.getFundStatus());
+        return R.ok();
     }
 }

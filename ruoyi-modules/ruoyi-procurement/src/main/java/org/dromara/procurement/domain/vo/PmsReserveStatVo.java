@@ -20,7 +20,7 @@ public class PmsReserveStatVo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     /**
-     * 申请人用户ID（pms_procurement_request.create_by）
+     * 备用金人用户ID（pms_fund_flow.applicant_id，=被扣款的出纳人）
      */
     private Long personId;
 

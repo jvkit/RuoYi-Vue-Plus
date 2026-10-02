@@ -51,6 +51,21 @@ public class PmsProcurementRequest extends BaseEntity {
     private String titleName;
 
     /**
+     * 备用金人+扣款顺序JSON：[{"personId":1,"personName":"x"},...]（自购多人备用金用，顺序即扣款顺序）
+     */
+    private String reservePeopleJson;
+
+    /**
+     * 使用人ID
+     */
+    private Long useUserId;
+
+    /**
+     * 使用人姓名
+     */
+    private String useUserName;
+
+    /**
      * 项目ID
      */
     private Long projectId;
@@ -139,6 +154,21 @@ public class PmsProcurementRequest extends BaseEntity {
      * 流程实例ID
      */
     private Long processInstanceId;
+
+    /**
+     * 发票上传完成标志（0未完成 1已完成）
+     */
+    private Integer invoiceDoneFlag;
+
+    /**
+     * 标记发票上传完成时间
+     */
+    private LocalDateTime invoiceDoneTime;
+
+    /**
+     * 标记发票上传完成的操作人ID
+     */
+    private Long invoiceDoneBy;
 
     /**
      * 备注

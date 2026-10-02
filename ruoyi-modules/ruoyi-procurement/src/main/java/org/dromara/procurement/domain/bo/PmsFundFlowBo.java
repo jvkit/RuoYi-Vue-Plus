@@ -105,6 +105,11 @@ public class PmsFundFlowBo extends BaseEntity {
     private String applicantName;
 
     /**
+     * 资金状态（仅人工备用金流水有值），查询筛选
+     */
+    private String fundStatus;
+
+    /**
      * 备注
      */
     private String remark;

@@ -13,8 +13,9 @@ import java.time.LocalDateTime;
  * 备用金额度账户视图对象 pms_reserve_account
  * <p>
  * occupied / available / recycled / unreimbursedCount 均为实时聚合值（非持久化字段），
- * 口径见 docs/9.20/资金与报销体系设计-v4-确认版.md §2.2：
- * 占用 = 自购申请金额（status=finish 且 fund_status ∈ 已采购未报销/已报销未汇款）
+ * 口径（多人拆账）：按资金流水 applicant_id 聚合——采购流水看关联申请的资金状态，
+ * 人工流水看自身 fund_status；
+ * 占用 = 状态 ∈ (已采购未报销, 已报销未汇款)，回笼 = 已报销已汇款，可用 = 额度 − 占用。
  *
  * @author procurement
  */

@@ -53,10 +53,12 @@ public class PmsInvoiceInfoController extends BaseController {
     @GetMapping("/list")
     public R<PageResult<PmsInvoiceInfoViewVo>> list(PmsInvoiceInfo query, PageQuery pageQuery) {
         List<PmsInvoiceInfoViewVo> list = invoiceInfoService.listViewByCondition(query);
-        // 简单分页：先全查再手动分页（数据量不大时可用）
+        // 简单分页：先全查再手动分页（数据量不大时可用）；缺省 pageNum=1、pageSize=全部
         int total = list.size();
-        int from = (pageQuery.getPageNum() - 1) * pageQuery.getPageSize();
-        int to = Math.min(from + pageQuery.getPageSize(), total);
+        int pageNum = pageQuery.getPageNum() == null ? 1 : pageQuery.getPageNum();
+        int pageSize = pageQuery.getPageSize() == null ? total : pageQuery.getPageSize();
+        int from = Math.max((pageNum - 1) * pageSize, 0);
+        int to = Math.min(from + pageSize, total);
         List<PmsInvoiceInfoViewVo> rows = from < total ? list.subList(from, to) : List.of();
         return R.ok(new PageResult<>(rows, (long) total));
     }
@@ -68,6 +70,19 @@ public class PmsInvoiceInfoController extends BaseController {
     @GetMapping("/{id}")
     public R<PmsInvoiceInfo> getInfo(@PathVariable Long id) {
         return R.ok(invoiceInfoService.getById(id));
+    }
+
+    /**
+     * 人工改挂发票到指定验收明细（拖拽修正，即时生效）；
+     * acceptanceItemId 传空表示取消挂载
+     */
+    @SaCheckPermission("procurement:invoice:assign")
+    @Log(title = "采购发票台账", businessType = BusinessType.UPDATE)
+    @PutMapping("/{id}/assign")
+    public R<Void> assign(@PathVariable Long id,
+                          @RequestParam(value = "acceptanceItemId", required = false) Long acceptanceItemId) {
+        invoiceInfoService.assignItem(id, acceptanceItemId);
+        return R.ok();
     }
 
     /**

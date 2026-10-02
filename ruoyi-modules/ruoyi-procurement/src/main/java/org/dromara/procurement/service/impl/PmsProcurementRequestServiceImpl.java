@@ -10,6 +10,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.dromara.workflow.api.domain.StartProcessDTO;
+import org.dromara.workflow.api.domain.FlowInstanceBizExtDTO;
 import org.dromara.workflow.api.domain.StartProcessReturnDTO;
 import org.dromara.workflow.api.event.ProcessDeleteEvent;
 import org.dromara.workflow.api.event.ProcessEvent;
@@ -37,7 +38,9 @@ import org.dromara.procurement.mapper.PmsProjectMapper;
 import org.dromara.procurement.mapper.PmsFundFlowMapper;
 import org.dromara.procurement.mapper.PmsFlowApproverMapper;
 import org.dromara.procurement.service.IPmsProcurementRequestService;
+import org.dromara.procurement.service.IPmsProjectService;
 import org.dromara.procurement.service.IPmsReserveAccountService;
+import org.dromara.procurement.utils.PmsFundSplitUtil;
 import org.dromara.procurement.utils.PmsPlatformUtil;
 import org.dromara.system.domain.SysUser;
 import org.dromara.system.mapper.SysUserMapper;
@@ -82,6 +85,7 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
     private final PmsProcurementRequestMapper baseMapper;
     private final PmsProcurementRequestItemMapper itemMapper;
     private final PmsProjectMapper projectMapper;
+    private final IPmsProjectService projectService;
     private final PmsFlowApproverMapper flowApproverMapper;
     private final PmsFundFlowMapper fundFlowMapper;
     private final WorkflowService workflowService;
@@ -120,6 +124,13 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
     public PmsProcurementRequestVo queryById(Long id) {
         PmsProcurementRequestVo vo = baseMapper.selectVoById(id);
         if (ObjectUtil.isNotNull(vo)) {
+            // selectVoById 无项目 join，详情需补项目名（列表走 XML join 不受影响）
+            if (vo.getProjectId() != null) {
+                PmsProject project = projectMapper.selectById(vo.getProjectId());
+                if (ObjectUtil.isNotNull(project)) {
+                    vo.setProjectName(project.getProjectName());
+                }
+            }
             List<PmsProcurementRequestItemVo> items = itemMapper.selectVoList(
                 Wrappers.<PmsProcurementRequestItem>lambdaQuery()
                     .eq(PmsProcurementRequestItem::getRequestId, id)
@@ -234,6 +245,8 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
         BigDecimal remain = used.subtract(request.getAmount());
         project.setUsedAmount(remain.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : remain);
         projectMapper.updateById(project);
+        // 父级（及祖先）已用金额 = 子级之和，自动同步
+        projectService.syncAncestors(project.getId());
         log.info("项目已用金额回滚：projectId={}, rollbackAmount={}, newUsedAmount={}",
             request.getProjectId(), request.getAmount(), project.getUsedAmount());
     }
@@ -293,6 +306,15 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
         PmsProcurementRequest request = baseMapper.selectById(bo.getId());
         // 提交时校验资金：总金额 ≤ 项目剩余资金，超出直接拒绝
         checkBudget(bo);
+        // 自购必须显式选择至少一个备用金出纳人（花谁的钱选谁；不选不允许提交）。
+        // 同时用拆账算法预校验所选人合计可用 ≥ 金额，避免审批通过后才在入账时失败。
+        if (!TITLE_TYPE_PUBLIC.equals(request.getTitleType())) {
+            if (StringUtils.isBlank(request.getReservePeopleJson())) {
+                throw new ServiceException("自购必须至少选择一个备用金出纳人");
+            }
+            List<PmsFundSplitUtil.Payer> payers = parseReservePeople(request.getReservePeopleJson());
+            PmsFundSplitUtil.split(payers, request.getAmount(), reserveAccountService::availableAmount);
+        }
         PmsProject project = projectMapper.selectById(request.getProjectId());
         if (project == null || project.getLeaderId() == null) {
             throw new ServiceException("请先为项目配置负责人（用户）");
@@ -300,6 +322,12 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
         StartProcessDTO startProcess = new StartProcessDTO();
         startProcess.setBusinessId(request.getId().toString());
         startProcess.setFlowCode("pms_request");
+        // 业务标题写入流程实例扩展：我的待办/已办列表的「业务标题」列靠它显示，不填则空白
+        FlowInstanceBizExtDTO bizExt = new FlowInstanceBizExtDTO();
+        bizExt.setBusinessId(request.getId().toString());
+        bizExt.setBusinessCode(request.getRequestCode());
+        bizExt.setBusinessTitle(request.getTitle());
+        startProcess.setBizExt(bizExt);
         Map<String, Object> variables = new HashMap<>();
         variables.put("leaderId", project.getLeaderId().toString());
         // 申请总金额：流程条件分支 ceo -> end(<1000) / supreme_decision_maker(>=1000)
@@ -312,12 +340,8 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
         if (!started) {
             throw new ServiceException("流程发起失败");
         }
-        // 自购申请：确保申请人拥有备用金账户（懒创建，额度取 sys_config 默认值）。
-        // 对公与备用金无关，不创建。账户创建失败不阻断采购提交（ensureAccount 内部已容错）。
-        if (!TITLE_TYPE_PUBLIC.equals(request.getTitleType())) {
-            Long applicantId = ObjectUtil.isNull(request.getCreateBy()) ? LoginHelper.getUserId() : request.getCreateBy();
-            reserveAccountService.ensureAccount(applicantId);
-        }
+        // 注意：备用金账户不再随提交自动创建，只能由资金管理员在资金管理页手动添加；
+        // 任何人都可以发起采购，备用金人下拉只列已有账户的人员（ReservePicker 数据源即账户表）。
         request.setStatus(BusinessStatusEnum.WAITING.getStatus());
         baseMapper.updateById(request);
         return queryById(request.getId());
@@ -397,7 +421,17 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
     }
 
     /**
-     * 审批通过后写入资金流水（幂等：同一申请只写一条 out 流水）
+     * 采购方式：自购（走备用金；历史 title_type 为空的旧单按自购口径处理）
+     */
+    private static final String TITLE_TYPE_SELF = "自购";
+
+    /**
+     * 审批通过后写入资金流水（幂等：同一申请只写一次 out 流水）。
+     * <p>
+     * 自购且选了备用金人（reserve_people_json 非空）：按 JSON 顺序拆账，每人一条流水
+     * （applicant_id = 被扣的人，金额为分摊额，顺序靠后者兜尾差）；
+     * 自购未选备用金人 / 对公：保持旧逻辑一条流水（applicant = 申请人）。
+     * 项目 used_amount 由 accumulateUsedAmount 总金额一次累加，不随拆账重复累加。
      */
     private void createFundFlow(PmsProcurementRequest request) {
         if (ObjectUtil.isNull(request.getAmount()) || request.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
@@ -409,23 +443,33 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
         if (exist > 0) {
             return;
         }
-        PmsFundFlow flow = new PmsFundFlow();
-        flow.setFlowNo("FUND-" + java.time.LocalDate.now().toString().replace("-", "")
-            + "-" + String.format("%03d", exist + 1));
-        flow.setFlowType("out");
-        flow.setRequestId(request.getId());
-        flow.setRequestCode(request.getRequestCode());
-        flow.setRequestTitle(request.getTitle());
-        flow.setAmount(request.getAmount());
-        flow.setOccurDate(java.time.LocalDate.now());
-        flow.setProjectId(request.getProjectId());
         PmsProject project = projectMapper.selectById(request.getProjectId());
-        if (ObjectUtil.isNotNull(project)) {
-            flow.setProjectName(project.getProjectName());
-            flow.setOperatorId(project.getLeaderId());
+
+        // 自购多人备用金：按备用金人顺序拆账，每人一条流水
+        if (!TITLE_TYPE_PUBLIC.equals(request.getTitleType()) && StringUtils.isNotBlank(request.getReservePeopleJson())) {
+            List<PmsFundSplitUtil.Payer> payers = parseReservePeople(request.getReservePeopleJson());
+            if (CollUtil.isNotEmpty(payers)) {
+                List<PmsFundSplitUtil.Split> splits = PmsFundSplitUtil.split(
+                    payers, request.getAmount(), reserveAccountService::availableAmount);
+                for (PmsFundSplitUtil.Split split : splits) {
+                    PmsFundFlow flow = buildBaseFlow(request, project);
+                    flow.setFlowNo(nextFlowNo());
+                    flow.setTitleType(TITLE_TYPE_SELF);
+                    flow.setApplicantId(split.getPersonId());
+                    flow.setApplicantName(split.getPersonName());
+                    flow.setAmount(split.getAmount());
+                    fundFlowMapper.insert(flow);
+                }
+                log.info("资金流水已按人拆分：申请[{}] 金额[{}] 共[{}]人",
+                    request.getRequestCode(), request.getAmount(), splits.size());
+                return;
+            }
         }
-        flow.setOperatorName(LoginHelper.getUsername());
-        // 分账维度：采购方式（自购/对公）+ 申请人（=谁的钱），均为申请单快照
+
+        // 旧逻辑：一条流水，申请人 = 申请人（谁的钱归谁）
+        PmsFundFlow flow = buildBaseFlow(request, project);
+        flow.setFlowNo(nextFlowNo());
+        flow.setAmount(request.getAmount());
         flow.setTitleType(request.getTitleType());
         Long applicantId = ObjectUtil.isNull(request.getCreateBy()) ? LoginHelper.getUserId() : request.getCreateBy();
         flow.setApplicantId(applicantId);
@@ -433,9 +477,64 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
             SysUser applicant = userMapper.selectById(applicantId);
             flow.setApplicantName(ObjectUtil.isNull(applicant) ? null : applicant.getNickName());
         }
-        flow.setRemark("采购申请审批通过自动记录");
         fundFlowMapper.insert(flow);
         log.info("资金流水已记录：申请[{}] 金额[{}]", request.getId(), request.getAmount());
+    }
+
+    /**
+     * 构造申请审批流水的基础字段（申请/项目快照 + 日期 + 操作人 + 备注），金额与分账字段由调用方补
+     */
+    private PmsFundFlow buildBaseFlow(PmsProcurementRequest request, PmsProject project) {
+        PmsFundFlow flow = new PmsFundFlow();
+        flow.setFlowType("out");
+        flow.setRequestId(request.getId());
+        flow.setRequestCode(request.getRequestCode());
+        flow.setRequestTitle(request.getTitle());
+        flow.setOccurDate(java.time.LocalDate.now());
+        flow.setProjectId(request.getProjectId());
+        if (ObjectUtil.isNotNull(project)) {
+            flow.setProjectName(project.getProjectName());
+            flow.setOperatorId(project.getLeaderId());
+        }
+        flow.setOperatorName(LoginHelper.getUsername());
+        flow.setRemark("采购申请审批通过自动记录");
+        return flow;
+    }
+
+    /**
+     * 生成当日流水编号 FUND-yyyyMMdd-NNN（按已落库流水数递增；同事务内先插后取不会重号）
+     */
+    private String nextFlowNo() {
+        String prefix = "FUND-" + java.time.LocalDate.now().toString().replace("-", "") + "-";
+        long count = fundFlowMapper.selectCount(Wrappers.<PmsFundFlow>lambdaQuery()
+            .likeRight(PmsFundFlow::getFlowNo, prefix));
+        return prefix + String.format("%03d", count + 1);
+    }
+
+    /**
+     * 解析备用金人 JSON：[{"personId":1,"personName":"x"},...]，顺序即扣款顺序
+     */
+    private List<PmsFundSplitUtil.Payer> parseReservePeople(String json) {
+        List<PmsFundSplitUtil.Payer> payers = new ArrayList<>();
+        try {
+            cn.hutool.json.JSONArray array = cn.hutool.json.JSONUtil.parseArray(json);
+            for (int i = 0; i < array.size(); i++) {
+                cn.hutool.json.JSONObject obj = array.getJSONObject(i);
+                Long personId = obj.getLong("personId");
+                String personName = obj.getStr("personName");
+                if (ObjectUtil.isNull(personId)) {
+                    continue;
+                }
+                if (StringUtils.isBlank(personName)) {
+                    SysUser user = userMapper.selectById(personId);
+                    personName = ObjectUtil.isNull(user) ? null : user.getNickName();
+                }
+                payers.add(new PmsFundSplitUtil.Payer(personId, personName));
+            }
+        } catch (Exception e) {
+            throw new ServiceException("备用金人数据格式异常，请重新选择备用金人");
+        }
+        return payers;
     }
 
     /**
@@ -450,6 +549,8 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
         BigDecimal amount = ObjectUtil.isNull(request.getAmount()) ? BigDecimal.ZERO : request.getAmount();
         project.setUsedAmount(used.add(amount));
         projectMapper.updateById(project);
+        // 父级（及祖先）已用金额 = 子级之和，自动同步
+        projectService.syncAncestors(project.getId());
     }
 
     /**

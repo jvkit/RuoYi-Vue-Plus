@@ -34,6 +34,12 @@ public interface IPmsInvoiceInfoService {
     boolean deleteByIds(Collection<Long> ids);
 
     /**
+     * 人工改挂发票到指定验收明细（拖拽修正，即时生效）；
+     * acceptanceItemId 为 null 表示取消挂载，发票回到未匹配池并记为无效
+     */
+    void assignItem(Long id, Long acceptanceItemId);
+
+    /**
      * 查询发票列表，支持按 validFlag 筛选
      */
     List<PmsInvoiceInfo> listByCondition(PmsInvoiceInfo query);

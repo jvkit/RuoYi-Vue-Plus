@@ -1,14 +1,18 @@
 package org.dromara.procurement.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import lombok.RequiredArgsConstructor;
+import org.dromara.common.core.exception.ServiceException;
 import org.dromara.common.core.utils.StringUtils;
 import org.dromara.procurement.domain.PmsAcceptance;
+import org.dromara.procurement.domain.PmsAcceptanceItem;
 import org.dromara.procurement.domain.PmsInvoiceInfo;
 import org.dromara.procurement.domain.PmsProcurementRequest;
 import org.dromara.procurement.domain.PmsProject;
 import org.dromara.procurement.domain.vo.PmsInvoiceInfoViewVo;
+import org.dromara.procurement.mapper.PmsAcceptanceItemMapper;
 import org.dromara.procurement.mapper.PmsAcceptanceMapper;
 import org.dromara.procurement.mapper.PmsInvoiceInfoMapper;
 import org.dromara.procurement.mapper.PmsProcurementRequestMapper;
@@ -35,6 +39,7 @@ public class PmsInvoiceInfoServiceImpl implements IPmsInvoiceInfoService {
     private final PmsProjectMapper projectMapper;
     private final PmsProcurementRequestMapper requestMapper;
     private final PmsAcceptanceMapper acceptanceMapper;
+    private final PmsAcceptanceItemMapper acceptanceItemMapper;
 
     @Override
     public PmsInvoiceInfo getById(Long id) {
@@ -53,6 +58,35 @@ public class PmsInvoiceInfoServiceImpl implements IPmsInvoiceInfoService {
             .orderByDesc(PmsInvoiceInfo::getCreateTime)
             .last("LIMIT 1");
         return baseMapper.selectOne(wrapper);
+    }
+
+    /**
+     * 人工改挂发票到指定验收明细（拖拽修正，即时生效）；
+     * acceptanceItemId 为 null 表示取消挂载，发票回到未匹配池并记为无效
+     */
+    @Override
+    public void assignItem(Long id, Long acceptanceItemId) {
+        PmsInvoiceInfo invoice = baseMapper.selectById(id);
+        if (invoice == null) {
+            throw new ServiceException("发票记录不存在");
+        }
+        String matchedName = null;
+        if (acceptanceItemId != null) {
+            PmsAcceptanceItem item = acceptanceItemMapper.selectById(acceptanceItemId);
+            if (item == null) {
+                throw new ServiceException("验收明细不存在");
+            }
+            matchedName = StringUtils.isBlank(item.getSpec())
+                ? item.getItemName() : item.getItemName() + "(" + item.getSpec() + ")";
+        }
+        // 用 UpdateWrapper 显式置 null（updateById 默认忽略 null 字段，清不掉旧值）
+        LambdaUpdateWrapper<PmsInvoiceInfo> uw = Wrappers.lambdaUpdate();
+        uw.eq(PmsInvoiceInfo::getId, id)
+            .set(PmsInvoiceInfo::getAcceptanceItemId, acceptanceItemId)
+            .set(PmsInvoiceInfo::getValidFlag, acceptanceItemId != null ? 1 : 0)
+            .set(PmsInvoiceInfo::getInvalidReason, acceptanceItemId != null ? null : "未匹配到本订单商品")
+            .set(PmsInvoiceInfo::getMatchedItems, matchedName);
+        baseMapper.update(null, uw);
     }
 
     @Override

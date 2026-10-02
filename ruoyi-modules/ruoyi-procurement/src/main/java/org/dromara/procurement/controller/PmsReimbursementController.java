@@ -47,6 +47,7 @@ public class PmsReimbursementController extends BaseController {
     private final IPmsReimbursementService reimbursementService;
     private final PmsReimbursementPackService packService;
     private final ISysOssService sysOssService;
+    private final org.dromara.procurement.service.IPmsFundFlowService fundFlowService;
 
     /**
      * 查询报销分页列表
@@ -104,6 +105,16 @@ public class PmsReimbursementController extends BaseController {
     }
 
     /**
+     * 导出前提醒：该申请的发票对应情况文本（只提醒不阻止导出，与「报销下载」同权限）
+     */
+    @SaCheckPermission("procurement:reimbursement:export")
+    @GetMapping("/{requestId}/invoice-txt")
+    public R<String> invoiceTxt(@NotNull(message = "主键不能为空") @PathVariable("requestId") Long requestId) {
+        // 注意不能用 R.ok(txt)：String 实参会命中 R.ok(String msg) 重载导致 data 为 null
+        return R.ok("ok", packService.buildInvoiceTxt(requestId));
+    }
+
+    /**
      * 下载报销包 ZIP（按打包时上传的 MinIO 文件流式回传）
      */
     @SaCheckPermission("procurement:reimbursement:export")
@@ -116,6 +127,20 @@ public class PmsReimbursementController extends BaseController {
         }
         Long ossId = packService.resolveOssIdFromUrl(vo.getFileUrl());
         ResponseEntity<byte[]> resp = sysOssService.download(ossId);
+        // 导出即确认报销：自购单资金状态 已采购未报销 → 已报销未汇款（对公不适用自动跳过；
+        // 状态机单向幂等，重复下载/已汇款单自动忽略）。状态推进失败不影响下载本身。
+        if (vo.getRequestId() != null) {
+            try {
+                org.dromara.procurement.domain.bo.PmsFundStatusBo statusBo =
+                    new org.dromara.procurement.domain.bo.PmsFundStatusBo();
+                statusBo.setIds(List.of(vo.getRequestId()));
+                statusBo.setAction("reimburse");
+                fundFlowService.changeFundStatus(statusBo);
+            } catch (Exception e) {
+                org.slf4j.LoggerFactory.getLogger(PmsReimbursementController.class)
+                    .warn("导出后资金状态推进失败（不影响下载）：reimbursementId={}", id, e);
+            }
+        }
         String zipName = URLEncoder.encode(
             (vo.getReimbursementCode() == null ? "报销包" : vo.getReimbursementCode()) + ".zip",
             StandardCharsets.UTF_8).replace("+", "%20");

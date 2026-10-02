@@ -61,6 +61,23 @@ public class PmsProcurementRequestVo implements Serializable {
     private String titleName;
 
     /**
+     * 备用金人（JSON，顺序即扣款顺序）
+     */
+    @ExcelProperty(value = "备用金人")
+    private String reservePeopleJson;
+
+    /**
+     * 使用人
+     */
+    @ExcelProperty(value = "使用人")
+    private String useUserName;
+
+    /**
+     * 使用人ID
+     */
+    private Long useUserId;
+
+    /**
      * 项目ID
      */
     @ExcelProperty(value = "项目ID")

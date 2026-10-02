@@ -53,9 +53,9 @@ public class PmsProjectBo extends BaseEntity {
     private String projectName;
 
     /**
-     * 归属部门ID
+     * 归属ID（pms_fund_source 树节点）
      */
-    private Long deptId;
+    private Long ownerId;
 
     /**
      * 项目负责人

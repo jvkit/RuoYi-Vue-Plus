@@ -1,6 +1,9 @@
 package org.dromara.procurement.service.impl;
 
 import cn.hutool.core.io.FileUtil;
+import cn.hutool.json.JSONArray;
+import cn.hutool.json.JSONObject;
+import cn.hutool.json.JSONUtil;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -8,10 +11,12 @@ import org.dromara.common.core.exception.ServiceException;
 import org.dromara.common.core.utils.StringUtils;
 import org.dromara.procurement.domain.PmsAcceptance;
 import org.dromara.procurement.domain.PmsAcceptanceItem;
+import org.dromara.procurement.domain.PmsInvoiceInfo;
 import org.dromara.procurement.domain.PmsProcurementRequest;
 import org.dromara.procurement.domain.PmsReimbursement;
 import org.dromara.procurement.mapper.PmsAcceptanceItemMapper;
 import org.dromara.procurement.mapper.PmsAcceptanceMapper;
+import org.dromara.procurement.mapper.PmsInvoiceInfoMapper;
 import org.dromara.procurement.mapper.PmsProcurementRequestMapper;
 import org.dromara.procurement.service.IPmsProcurementRequestService;
 import org.dromara.procurement.service.IPmsReimbursementService;
@@ -32,7 +37,9 @@ import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -50,6 +57,7 @@ public class PmsReimbursementPackService {
     private final PmsAcceptanceMapper acceptanceMapper;
     private final PmsAcceptanceItemMapper acceptanceItemMapper;
     private final PmsProcurementRequestMapper requestMapper;
+    private final PmsInvoiceInfoMapper invoiceInfoMapper;
     private final ISysOssService sysOssService;
     private final SysOssMapper sysOssMapper;
     private final IPmsProcurementRequestService requestService;
@@ -168,6 +176,127 @@ public class PmsReimbursementPackService {
                 FileUtil.del(workDir.toFile());
             }
         }
+    }
+
+    /**
+     * 导出前提醒文本：该采购申请的发票对应情况（验收单 AI 识别摘要 + 发票台账），只读不影响导出。
+     */
+    public String buildInvoiceTxt(Long requestId) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("发票对应情况提醒\n");
+        PmsProcurementRequest request = requestId != null ? requestMapper.selectById(requestId) : null;
+        if (request != null) {
+            sb.append("采购申请: ").append(request.getTitle())
+                .append("（").append(request.getRequestCode()).append("）\n");
+        }
+        PmsAcceptance acceptance = requestId != null ? findFinishedAcceptance(requestId, null) : null;
+        if (acceptance != null) {
+            sb.append("验收单号: ").append(acceptance.getAcceptanceCode()).append("\n");
+        }
+        List<PmsAcceptanceItem> items = new ArrayList<>();
+        java.util.Map<Long, String> itemNames = new java.util.HashMap<>();
+        if (acceptance != null) {
+            items = acceptanceItemMapper.selectList(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<PmsAcceptanceItem>()
+                    .eq(PmsAcceptanceItem::getAcceptanceId, acceptance.getId())
+                    .orderByAsc(PmsAcceptanceItem::getId));
+            for (PmsAcceptanceItem item : items) {
+                if (item.getId() != null) {
+                    itemNames.put(item.getId(), item.getItemName());
+                }
+            }
+        }
+
+        // 1. AI 识别对应摘要（ai_detail 按轮次追加，取最新一轮 summary.lines）
+        boolean hasAi = false;
+        if (acceptance != null && StringUtils.isNotBlank(acceptance.getAiDetail())) {
+            try {
+                JSONArray rounds = JSONUtil.parseArray(acceptance.getAiDetail());
+                if (!rounds.isEmpty()) {
+                    JSONObject summary = rounds.getJSONObject(rounds.size() - 1).getJSONObject("summary");
+                    if (summary != null) {
+                        sb.append("\n【AI 发票识别对应结果】\n");
+                        if (summary.getStr("matchedInvoiceCount") != null) {
+                            sb.append("匹配发票 ").append(summary.getStr("matchedInvoiceCount"))
+                                .append(" 张，匹配商品 ").append(summary.getStr("matchedItemCount"))
+                                .append(" 项，不属于本订单 ").append(summary.getStr("externalInvoiceCount"))
+                                .append(" 张\n");
+                        }
+                        JSONArray lines = summary.getJSONArray("lines");
+                        if (lines != null) {
+                            for (int i = 0; i < lines.size(); i++) {
+                                sb.append(lines.getStr(i)).append("\n");
+                            }
+                        }
+                        hasAi = true;
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("验收单 ai_detail 解析失败，跳过 AI 摘要: acceptanceId={}", acceptance.getId(), e);
+            }
+        }
+
+        // 2. 发票台账（invoice_info 当前有效数据）
+        List<PmsInvoiceInfo> invoices = new ArrayList<>();
+        if (requestId != null) {
+            invoices = invoiceInfoMapper.selectList(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<PmsInvoiceInfo>()
+                    .eq(PmsInvoiceInfo::getRequestId, requestId)
+                    .orderByAsc(PmsInvoiceInfo::getId));
+        }
+        if (!invoices.isEmpty()) {
+            long validCount = invoices.stream().filter(i -> i.getValidFlag() != null && i.getValidFlag() == 1).count();
+            sb.append("\n【发票台账】共 ").append(invoices.size())
+                .append(" 张（有效 ").append(validCount)
+                .append(" / 无效 ").append(invoices.size() - validCount).append("）\n");
+            int no = 1;
+            for (PmsInvoiceInfo inv : invoices) {
+                boolean valid = inv.getValidFlag() != null && inv.getValidFlag() == 1;
+                sb.append("  ").append(no++).append(". ").append(nullToDash(inv.getSellerName()))
+                    .append("  价税合计 ").append(inv.getTotalAmount() == null ? "-" : inv.getTotalAmount().toPlainString())
+                    .append(" 元  票号 ").append(StringUtils.isNotBlank(inv.getInvoiceNumber()) ? inv.getInvoiceNumber() : nullToDash(inv.getInvoiceCode()));
+                if (valid) {
+                    String matched = StringUtils.isNotBlank(inv.getMatchedItems())
+                        ? inv.getMatchedItems()
+                        : (inv.getAcceptanceItemId() != null ? nullToDash(itemNames.get(inv.getAcceptanceItemId())) : "-");
+                    sb.append("  → 对应商品: ").append(matched);
+                } else {
+                    sb.append("  无效原因: ").append(nullToDash(inv.getInvalidReason()));
+                }
+                sb.append("\n");
+            }
+        } else if (!hasAi) {
+            sb.append("\n未查询到该申请的发票识别记录与发票台账，请确认发票已上传并完成 AI 匹配。\n");
+        }
+
+        // 3. 尚无发票对应的验收明细
+        if (!items.isEmpty()) {
+            Set<Long> matchedItemIds = new HashSet<>();
+            for (PmsInvoiceInfo inv : invoices) {
+                if (inv.getValidFlag() != null && inv.getValidFlag() == 1 && inv.getAcceptanceItemId() != null) {
+                    matchedItemIds.add(inv.getAcceptanceItemId());
+                }
+            }
+            List<String> missing = new ArrayList<>();
+            for (PmsAcceptanceItem item : items) {
+                if (item.getId() != null && !matchedItemIds.contains(item.getId())) {
+                    missing.add(item.getItemName());
+                }
+            }
+            if (!missing.isEmpty()) {
+                sb.append("\n【尚无发票对应的验收明细】\n");
+                for (String name : missing) {
+                    sb.append("  - ").append(name).append("\n");
+                }
+            }
+        }
+
+        sb.append("\n提示: 以上内容仅为导出前核对提醒，不影响导出；报销包内「清单.txt」为打包时的文件对应关系。\n");
+        return sb.toString();
+    }
+
+    private String nullToDash(String s) {
+        return StringUtils.isBlank(s) ? "-" : s;
     }
 
     /**

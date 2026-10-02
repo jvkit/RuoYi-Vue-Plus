@@ -91,6 +91,11 @@ public class PmsFundFlow extends BaseEntity {
     private String titleType;
 
     /**
+     * 资金状态（仅人工备用金流水用：purchased_unreimbursed/reimbursed_unpaid/reimbursed_paid；采购流水为空）
+     */
+    private String fundStatus;
+
+    /**
      * 申请人ID（=谁的钱），取自申请单 create_by
      */
     private Long applicantId;

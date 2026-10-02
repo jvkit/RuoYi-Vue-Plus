@@ -1,6 +1,7 @@
 package org.dromara.procurement.service.impl;
 
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -8,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.dromara.common.core.domain.PageResult;
 import org.dromara.common.core.exception.ServiceException;
+import org.dromara.common.core.utils.MapstructUtils;
 import org.dromara.common.mybatis.core.page.PageQuery;
 import org.dromara.common.satoken.utils.LoginHelper;
 import org.dromara.procurement.domain.PmsFundFlow;
@@ -15,6 +17,7 @@ import org.dromara.procurement.domain.PmsProcurementRequest;
 import org.dromara.procurement.domain.PmsProject;
 import org.dromara.procurement.domain.bo.PmsFundFlowBo;
 import org.dromara.procurement.domain.bo.PmsFundStatusBo;
+import org.dromara.procurement.domain.bo.PmsManualFundFlowBo;
 import org.dromara.procurement.domain.vo.PmsFundFlowVo;
 import org.dromara.procurement.domain.vo.PmsFundStatusBoardVo;
 import org.dromara.procurement.domain.vo.PmsFundSummaryVo;
@@ -23,7 +26,9 @@ import org.dromara.procurement.mapper.PmsFundFlowMapper;
 import org.dromara.procurement.mapper.PmsProcurementRequestMapper;
 import org.dromara.procurement.mapper.PmsProjectMapper;
 import org.dromara.procurement.service.IPmsFundFlowService;
+import org.dromara.procurement.service.IPmsProjectService;
 import org.dromara.procurement.service.IPmsReserveAccountService;
+import org.dromara.procurement.utils.PmsFundSplitUtil;
 import org.dromara.system.domain.SysUser;
 import org.dromara.system.mapper.SysUserMapper;
 import org.springframework.stereotype.Service;
@@ -53,7 +58,23 @@ public class PmsFundFlowServiceImpl implements IPmsFundFlowService {
     private final PmsProjectMapper projectMapper;
     private final PmsProcurementRequestMapper requestMapper;
     private final IPmsReserveAccountService reserveAccountService;
+    private final IPmsProjectService projectService;
     private final SysUserMapper userMapper;
+
+    /**
+     * 采购方式：自购（走备用金）
+     */
+    private static final String TITLE_TYPE_SELF = "自购";
+
+    /**
+     * 采购方式：对公（直支项目资金，与备用金无关）
+     */
+    private static final String TITLE_TYPE_PUBLIC = "对公";
+
+    /**
+     * 人工流水默认备注
+     */
+    private static final String DEFAULT_MANUAL_REMARK = "非采购订单资金消耗";
 
     @Override
     public PmsFundFlowVo queryById(Long id) {
@@ -87,8 +108,12 @@ public class PmsFundFlowServiceImpl implements IPmsFundFlowService {
         LambdaQueryWrapper<PmsFundFlow> wrapper = Wrappers.lambdaQuery();
         wrapper.eq(bo.getProjectId() != null, PmsFundFlow::getProjectId, bo.getProjectId());
         wrapper.eq(org.dromara.common.core.utils.StringUtils.isNotBlank(bo.getFlowType()), PmsFundFlow::getFlowType, bo.getFlowType());
+        // 流水编号：模糊筛选
+        wrapper.like(org.dromara.common.core.utils.StringUtils.isNotBlank(bo.getFlowNo()), PmsFundFlow::getFlowNo, bo.getFlowNo());
         // 采购方式（自购/对公）：分账筛选的基础
         wrapper.eq(org.dromara.common.core.utils.StringUtils.isNotBlank(bo.getTitleType()), PmsFundFlow::getTitleType, bo.getTitleType());
+        // 资金状态（仅人工备用金流水有值）
+        wrapper.eq(org.dromara.common.core.utils.StringUtils.isNotBlank(bo.getFundStatus()), PmsFundFlow::getFundStatus, bo.getFundStatus());
         // 申请人：ID 精确 / 姓名模糊
         wrapper.eq(bo.getApplicantId() != null, PmsFundFlow::getApplicantId, bo.getApplicantId());
         wrapper.like(org.dromara.common.core.utils.StringUtils.isNotBlank(bo.getApplicantName()),
@@ -185,19 +210,19 @@ public class PmsFundFlowServiceImpl implements IPmsFundFlowService {
     }
 
     /**
-     * 根据已审批通过的采购申请，按项目汇总已用金额
+     * 按项目汇总已用金额（数据源：全部 out 资金流水，含采购审批流水与人工登记流水）。
+     * 备用金（自购）支出同样扣减项目资金，必须与项目 used_amount 记账口径一致。
      */
     private Map<Long, BigDecimal> calcUsedAmountByProject(Long projectId) {
-        LambdaQueryWrapper<PmsProcurementRequest> wrapper = Wrappers.lambdaQuery();
-        wrapper.eq(PmsProcurementRequest::getStatus, "finish");
-        wrapper.eq(PmsProcurementRequest::getDelFlag, 0L);
-        wrapper.isNotNull(PmsProcurementRequest::getProjectId);
-        wrapper.isNotNull(PmsProcurementRequest::getAmount);
-        wrapper.eq(projectId != null, PmsProcurementRequest::getProjectId, projectId);
-        List<PmsProcurementRequest> requests = requestMapper.selectList(wrapper);
-        return requests.stream()
-            .collect(Collectors.groupingBy(PmsProcurementRequest::getProjectId,
-                Collectors.mapping(r -> nvl(r.getAmount()), Collectors.reducing(BigDecimal.ZERO, BigDecimal::add))));
+        LambdaQueryWrapper<PmsFundFlow> wrapper = Wrappers.lambdaQuery();
+        wrapper.eq(PmsFundFlow::getFlowType, "out");
+        wrapper.eq(PmsFundFlow::getDelFlag, 0L);
+        wrapper.isNotNull(PmsFundFlow::getProjectId);
+        wrapper.eq(projectId != null, PmsFundFlow::getProjectId, projectId);
+        List<PmsFundFlow> flows = baseMapper.selectList(wrapper);
+        return flows.stream()
+            .collect(Collectors.groupingBy(PmsFundFlow::getProjectId,
+                Collectors.mapping(f -> nvl(f.getAmount()), Collectors.reducing(BigDecimal.ZERO, BigDecimal::add))));
     }
 
     /**
@@ -258,6 +283,8 @@ public class PmsFundFlowServiceImpl implements IPmsFundFlowService {
             baseMapper.insert(flow);
             count++;
         }
+        // 5. 全量重算父级项目金额（预算/已用 = 直接子级之和）
+        projectService.recomputeAllParentAmounts();
         log.info("资金同步完成：共处理 {} 条采购申请", count);
     }
 
@@ -395,6 +422,140 @@ public class PmsFundFlowServiceImpl implements IPmsFundFlowService {
 
     private BigDecimal nvl(BigDecimal v) {
         return v == null ? BigDecimal.ZERO : v;
+    }
+
+    /**
+     * 人工登记资金流水（非采购订单的资金消耗）
+     * <p>
+     * 自购：按 payers 顺序拆账（同审批拆账规则），每人一条流水，fund_status=已采购未报销；
+     * 对公：一条流水，fund_status=null。项目 used_amount 按总额一次累加并同步父级（事务内完成）。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public List<PmsFundFlowVo> createManualFlow(PmsManualFundFlowBo bo) {
+        String titleType = bo.getTitleType() == null ? "" : bo.getTitleType().trim();
+        boolean selfPurchase = TITLE_TYPE_SELF.equals(titleType);
+        if (!selfPurchase && !TITLE_TYPE_PUBLIC.equals(titleType)) {
+            throw new ServiceException("采购方式仅支持：" + TITLE_TYPE_SELF + " / " + TITLE_TYPE_PUBLIC);
+        }
+        BigDecimal amount = nvl(bo.getAmount());
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ServiceException("金额必须大于 0");
+        }
+        PmsProject project = projectMapper.selectById(bo.getProjectId());
+        if (ObjectUtil.isNull(project)) {
+            throw new ServiceException("项目不存在");
+        }
+        String remark = org.dromara.common.core.utils.StringUtils.isNotBlank(bo.getRemark())
+            ? bo.getRemark() : DEFAULT_MANUAL_REMARK;
+
+        List<PmsFundFlow> flows = new ArrayList<>();
+        if (selfPurchase) {
+            // 备用金按人拆账（顺序即扣款顺序，靠后者兜尾差）
+            List<PmsFundSplitUtil.Payer> payers = new ArrayList<>();
+            if (CollUtil.isNotEmpty(bo.getPayers())) {
+                for (PmsManualFundFlowBo.Payer p : bo.getPayers()) {
+                    if (ObjectUtil.isNull(p.getPersonId())) {
+                        continue;
+                    }
+                    String personName = org.dromara.common.core.utils.StringUtils.isNotBlank(p.getPersonName())
+                        ? p.getPersonName() : resolveNickName(p.getPersonId());
+                    payers.add(new PmsFundSplitUtil.Payer(p.getPersonId(), personName));
+                }
+            }
+            List<PmsFundSplitUtil.Split> splits = PmsFundSplitUtil.split(payers, amount, reserveAccountService::availableAmount);
+            for (PmsFundSplitUtil.Split split : splits) {
+                PmsFundFlow flow = buildManualBaseFlow(project, remark);
+                flow.setTitleType(TITLE_TYPE_SELF);
+                flow.setApplicantId(split.getPersonId());
+                flow.setApplicantName(split.getPersonName());
+                flow.setAmount(split.getAmount());
+                // 人工备用金流水：资金状态挂流水自身，初始=已采购未报销
+                flow.setFundStatus(PmsFundStatusEnum.PURCHASED_UNREIMBURSED.getStatus());
+                flows.add(flow);
+            }
+        } else {
+            // 对公直支：一条流水，不扣备用金、无资金状态
+            PmsFundFlow flow = buildManualBaseFlow(project, remark);
+            flow.setTitleType(TITLE_TYPE_PUBLIC);
+            flow.setAmount(amount);
+            flows.add(flow);
+        }
+
+        // 项目账本：总金额一次累加（不随拆账重复累加），并同步父级
+        project.setUsedAmount(nvl(project.getUsedAmount()).add(amount));
+        projectMapper.updateById(project);
+        projectService.syncAncestors(project.getId());
+
+        List<PmsFundFlowVo> result = new ArrayList<>(flows.size());
+        for (PmsFundFlow flow : flows) {
+            flow.setFlowNo(generateFlowNo());
+            baseMapper.insert(flow);
+            result.add(MapstructUtils.convert(flow, PmsFundFlowVo.class));
+        }
+        log.info("人工资金流水已登记：项目[{}] 方式[{}] 金额[{}] 共[{}]条",
+            project.getProjectName(), titleType, amount, flows.size());
+        return result;
+    }
+
+    /**
+     * 人工流水资金状态推进（仅 request_id 为空 且 title_type=自购 的人工流水可操作）
+     * <p>
+     * 单向不可回溯、幂等（已是目标状态直接成功）；操作人留痕在 operator_id/operator_name，备注追加流转记录。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void changeManualFundStatus(Long id, String fundStatus) {
+        PmsFundStatusEnum target = PmsFundStatusEnum.getByStatus(fundStatus);
+        if (target != PmsFundStatusEnum.REIMBURSED_UNPAID && target != PmsFundStatusEnum.REIMBURSED_PAID) {
+            throw new ServiceException("目标状态仅支持：已报销未汇款 / 已报销已汇款");
+        }
+        PmsFundFlow flow = baseMapper.selectById(id);
+        if (ObjectUtil.isNull(flow)) {
+            throw new ServiceException("资金流水不存在");
+        }
+        if (ObjectUtil.isNotNull(flow.getRequestId())) {
+            throw new ServiceException("仅人工登记的流水可手动设置资金状态（采购流水请在采购申请上操作）");
+        }
+        if (!TITLE_TYPE_SELF.equals(flow.getTitleType())) {
+            throw new ServiceException("仅自购（备用金）流水可设置资金状态");
+        }
+        String current = flow.getFundStatus();
+        if (target.getStatus().equals(current)) {
+            // 幂等：已是目标状态直接成功
+            return;
+        }
+        if (!PmsFundStatusEnum.canTransfer(current, target.getStatus())) {
+            throw new ServiceException("当前状态[" + PmsFundStatusEnum.findByStatus(current)
+                + "]不允许推进到[" + target.getDesc() + "]");
+        }
+        Long operatorId = LoginHelper.getUserId();
+        String operatorName = resolveNickName(operatorId);
+        LocalDateTime now = LocalDateTime.now();
+        PmsFundFlow update = new PmsFundFlow();
+        update.setId(id);
+        update.setFundStatus(target.getStatus());
+        update.setOperatorId(operatorId);
+        update.setOperatorName(operatorName);
+        String trace = "【" + now + " " + operatorName + " 置为" + target.getDesc() + "】";
+        update.setRemark(org.dromara.common.core.utils.StringUtils.isBlank(flow.getRemark())
+            ? trace : flow.getRemark() + " " + trace);
+        baseMapper.updateById(update);
+        log.info("人工流水资金状态推进：流水[{}] {} -> {}，操作人[{}]", flow.getFlowNo(), current, target.getStatus(), operatorName);
+    }
+
+    /**
+     * 人工流水基础字段：无采购申请（request_id/code 留空）、审批人=无、发生日期=今天
+     */
+    private PmsFundFlow buildManualBaseFlow(PmsProject project, String remark) {
+        PmsFundFlow flow = new PmsFundFlow();
+        flow.setFlowType("out");
+        flow.setProjectId(project.getId());
+        flow.setProjectName(project.getProjectName());
+        flow.setOccurDate(LocalDate.now());
+        flow.setOperatorName("无");
+        flow.setRemark(remark);
+        return flow;
     }
 
     /**

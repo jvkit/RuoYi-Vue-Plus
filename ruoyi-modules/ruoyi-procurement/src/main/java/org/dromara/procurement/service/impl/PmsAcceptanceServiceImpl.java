@@ -38,6 +38,7 @@ import org.dromara.procurement.mapper.PmsWarehouseStockMapper;
 import org.dromara.procurement.service.IPmsAcceptanceService;
 import org.dromara.workflow.api.WorkflowService;
 import org.dromara.workflow.api.domain.StartProcessDTO;
+import org.dromara.workflow.api.domain.FlowInstanceBizExtDTO;
 import org.dromara.workflow.api.event.ProcessEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
@@ -294,6 +295,12 @@ public class PmsAcceptanceServiceImpl implements IPmsAcceptanceService {
         StartProcessDTO startProcess = new StartProcessDTO();
         startProcess.setBusinessId(acceptance.getId().toString());
         startProcess.setFlowCode("pms_acceptance");
+        // 业务标题写入流程实例扩展：待办/已办列表「业务标题」列靠它显示
+        FlowInstanceBizExtDTO bizExt = new FlowInstanceBizExtDTO();
+        bizExt.setBusinessId(acceptance.getId().toString());
+        bizExt.setBusinessCode(acceptance.getAcceptanceCode());
+        bizExt.setBusinessTitle(acceptance.getAcceptanceCode());
+        startProcess.setBizExt(bizExt);
         Map<String, Object> variables = new HashMap<>();
         variables.put("applicantId", request.getCreateBy().toString());
         variables.put("leaderId", project.getLeaderId().toString());
