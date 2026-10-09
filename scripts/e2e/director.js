@@ -6,6 +6,7 @@ const { chromium } = require('/home/jvkit/workspace/oa/scripts/demo-video/node_m
 const { treeSelectByLabel } = require('./final_lib');
 
 const AUTO = !!process.env.PW_AUTO;
+const HEADED = !!process.env.PW_HEADED; // 有头自动连跑（不暂停，能看着窗口动）
 const BASE = (process.env.OA_BASE || 'http://127.0.0.1:8082').replace(/\/$/, '');
 const PHOTO = '/home/jvkit/workspace/oa/temp/testing/GX12_compressed.jpg';
 const PAYMENT_IMG = '/home/jvkit/workspace/oa/test-invoices/good_invoice.png';
@@ -27,7 +28,7 @@ let stepNo = 0;
 let rl = null;
 function ask() {
   return new Promise((resolve) => {
-    if (AUTO) return resolve('');
+    if (AUTO || HEADED) return resolve('');
     if (!rl) rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     rl.question('', (ans) => resolve(ans));
   });
@@ -38,7 +39,7 @@ async function step(actor, action, look, expect) {
   console.log(`【${actor}】${action}`);
   if (look) console.log(`👀 看这里：${look}`);
   if (expect) console.log(`✅ 预期：${expect}`);
-  if (!AUTO) {
+  if (!AUTO && !HEADED) {
     console.log('（检查完按回车执行这步；输入 q 回车退出）');
     const ans = await ask();
     if (ans.trim() === 'q') {
@@ -55,7 +56,7 @@ async function openActor(key) {
   const c = CAST[key];
   console.log(`[login] ${c.label} 开始…`);
   const browser = await chromium.launch({
-    headless: AUTO,
+    headless: AUTO && !HEADED ? true : false,
     args: [`--window-position=${c.pos[0]},${c.pos[1]}`, '--window-size=980,600']
   });
   browsers.push(browser);
