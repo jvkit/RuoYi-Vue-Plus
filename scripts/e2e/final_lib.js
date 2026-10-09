@@ -6,7 +6,7 @@ const PIC = process.env.PIC || '/home/jvkit/workspace/oa/temp/testing/pic';
 const BASE = (process.env.OA_BASE || 'http://127.0.0.1:8082').replace(/\/$/, '');
 
 async function launch() {
-  const b = await chromium.launch();
+  const b = await chromium.launch({ headless: !!process.env.PW_AUTO });
   return b;
 }
 

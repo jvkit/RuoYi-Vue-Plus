@@ -85,6 +85,13 @@ const TESTS = [
     target: 'both',
     tags: ['报销', '导出', '资金'],
     desc: '报销专项：选已验收单→生成报销包→导出 zip'
+  },
+  {
+    name: 'notice',
+    file: 'notice_test.js',
+    target: 'both',
+    tags: ['铃铛', '通知', '消息', '审批'],
+    desc: '铃铛通知：冯忠俊提交申请 → 李迪收到实时弹窗 + 铃铛红点'
   }
 ];
 
