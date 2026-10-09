@@ -1,7 +1,17 @@
 // 铃铛通知测试：验证「普通用户提交申请 → 项目负责人收到实时弹窗 + 铃铛红点」
 // 用法：node notice_test.js            （有头，冯忠俊 + 李迪两个窗口）
 //       PW_AUTO=1 node notice_test.js （无头）
+const readline = require('readline');
 const { chromium } = require('/home/jvkit/workspace/oa/scripts/demo-video/node_modules/playwright');
+
+// 有头模式下逐步暂停：等用户按 Enter 继续
+const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+function pause(msg) {
+  return new Promise(resolve => {
+    if (AUTO) return resolve();
+    rl.question(`\n👀 ${msg}\n   检查完按 Enter 继续…`, () => resolve());
+  });
+}
 
 const BASE = (process.env.OA_BASE || 'http://127.0.0.1:8082').replace(/\/$/, '');
 const AUTO = !!process.env.PW_AUTO;
@@ -163,6 +173,7 @@ async function submitRequest(applierPage) {
   const confirmBtn = p.locator('.el-message-box button:has-text("确定"), .el-message-box button:has-text("确认"), .el-message-box button:has-text("确 定")').first();
   await p.waitForTimeout(3000);
   console.log('[applier] 已提交申请');
+  await pause('申请人窗口：申请已提交，切换到领导窗口看通知');
 }
 
 (async () => {
@@ -174,9 +185,11 @@ async function submitRequest(applierPage) {
   const applier = await openWindow(browser, APPLIER, [960, 0]);
 
   // 2. 领导先全部已读，清零铃铛
+  await pause('领导窗口：即将执行「全部已读」，观察铃铛清零');
   await markAllRead(leader.p);
   const before = await getUnreadBadge(leader.p);
   console.log(`[check] 领导铃铛未读数（提交前）: ${before}`);
+  await pause('领导窗口：铃铛已清零');
 
   // 3. 申请人提交
   await submitRequest(applier.p);
@@ -189,6 +202,7 @@ async function submitRequest(applierPage) {
     if (n > before || notif > 0) {
       notifAppeared = true;
       console.log(`[check] 领导侧检测到通知（badge=${n}, 弹窗=${notif}）`);
+      await pause('领导窗口：通知弹窗已出现，看清后按 Enter 继续');
       break;
     }
     await leader.p.waitForTimeout(500);
@@ -204,6 +218,7 @@ async function submitRequest(applierPage) {
     allOk = false;
   }
 
+  rl.close();
   await browser.close();
   process.exit(allOk ? 0 : 1);
 })().catch(e => { console.error('💥 测试异常:', e.message.split('\n')[0]); process.exit(1); });
