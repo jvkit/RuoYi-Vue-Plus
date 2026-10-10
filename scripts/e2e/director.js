@@ -303,7 +303,7 @@ const formItem = (label) => `xpath=//div[contains(@class,'el-form-item')][*[cont
   await feng.locator('button:has-text("新增")').first().click();
   await feng.waitForTimeout(1500);
   const adlg = feng.locator('.el-dialog:visible').first();
-  await adlg.locator(formItem('关联采购申请')).locator('.el-select__wrapper, input').first().click();
+  await adlg.locator(formItem('关联采购')).locator('.el-select__wrapper, input').first().click();
   await feng.waitForTimeout(900);
   await feng.locator('.el-select-dropdown:visible .el-select-dropdown__item', { hasText: TITLE }).first().click();
   await feng.waitForTimeout(2500);
