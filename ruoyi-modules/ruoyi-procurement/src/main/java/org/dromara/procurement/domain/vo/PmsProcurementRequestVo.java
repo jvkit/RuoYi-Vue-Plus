@@ -128,6 +128,11 @@ public class PmsProcurementRequestVo implements Serializable {
     private String invoiceInfoJson;
 
     /**
+     * 对公供应商公司名（导出申请表时写入 R 列，可选填）
+     */
+    private String companyName;
+
+    /**
      * 项目剩余资金（前端提示用）
      */
     private BigDecimal remainingBudget;

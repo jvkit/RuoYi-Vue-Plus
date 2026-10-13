@@ -91,6 +91,11 @@ public class PmsProcurementRequest extends BaseEntity {
     private String invoiceInfoJson;
 
     /**
+     * 对公供应商公司名（导出申请表时写入 R 列，可选填）
+     */
+    private String companyName;
+
+    /**
      * 总金额
      */
     private BigDecimal amount;

@@ -88,4 +88,13 @@ public interface IPmsProcurementRequestService {
      */
     byte[] buildFormExcelBytes(Long id);
 
+    /**
+     * 生成报销表 Excel 字节（金额取发票实际金额，无发票明细回退到申请预估价）
+     *
+     * @param id 采购申请ID
+     * @param invoiceAmounts 发票金额列表（按顺序对应明细行，不足则回退）
+     * @return Excel 字节数组
+     */
+    byte[] buildReimburseExcelBytes(Long id, List<java.math.BigDecimal> invoiceAmounts);
+
 }

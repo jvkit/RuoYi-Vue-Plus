@@ -101,6 +101,18 @@ public class PmsReimbursementPackService {
             String excelName = sanitizeFileName(request.getTitle()) + ".xlsx";
             Files.write(workDir.resolve(excelName), excel);
 
+            // 1.5 报销表 Excel（金额取发票实际金额，无发票明细回退到申请预估价）
+            List<PmsInvoiceInfo> invoicesForExcel = invoiceInfoMapper.selectList(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<PmsInvoiceInfo>()
+                    .eq(PmsInvoiceInfo::getRequestId, reimb.getRequestId())
+                    .orderByAsc(PmsInvoiceInfo::getId));
+            List<java.math.BigDecimal> invoiceAmounts = invoicesForExcel.stream()
+                .map(PmsInvoiceInfo::getTotalAmount)
+                .toList();
+            byte[] reimburseExcel = requestService.buildReimburseExcelBytes(reimb.getRequestId(), invoiceAmounts);
+            String reimburseExcelName = "报销_" + sanitizeFileName(request.getTitle()) + ".xlsx";
+            Files.write(workDir.resolve(reimburseExcelName), reimburseExcel);
+
             // 2. 验收图片/ + 发票pdf/（按明细商品名命名，序号对应）
             Path photoDir = workDir.resolve("验收图片");
             Path invoiceDir = workDir.resolve("发票pdf");
@@ -158,6 +170,7 @@ public class PmsReimbursementPackService {
                 java.util.Map<String, Object> content = new java.util.LinkedHashMap<>();
                 content.put("ossId", String.valueOf(oss.getOssId()));
                 content.put("excel", excelName);
+                content.put("reimburseExcel", reimburseExcelName);
                 content.put("photoCount", items.stream().filter(i -> StringUtils.isNotBlank(i.getPhotoUrl())).count());
                 content.put("invoiceCount", items.stream().filter(i -> StringUtils.isNotBlank(i.getInvoiceUrl())).count());
                 content.put("itemCount", items.size());

@@ -807,7 +807,13 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
                         String rowReason = StringUtils.isNotBlank(item.getPurchaseReason())
                             ? item.getPurchaseReason() : vo.getApplyReason();
                         setCell(sheet, rowIdx, 16, rowReason);                      // Q 采购理由
-                        setHyperLink(sheet, rowIdx, 17, item.getLink());            // R 采购链接
+                        // R 列：对公写公司名（文本），自购写链接（超链接）
+                        if ("对公".equals(vo.getTitleType())) {
+                            String companyName = StringUtils.isNotBlank(vo.getCompanyName()) ? vo.getCompanyName() : "";
+                            setCell(sheet, rowIdx, 17, companyName);                // R 公司名（文本）
+                        } else {
+                            setHyperLink(sheet, rowIdx, 17, item.getLink());        // R 采购链接
+                        }
                         rowIdx++;
                     }
                 }
@@ -915,6 +921,137 @@ public class PmsProcurementRequestServiceImpl implements IPmsProcurementRequestS
         link.setAddress(safeUrl);
         link.setLabel(safeUrl);
         cell.setHyperlink(link);
+    }
+
+    /**
+     * 生成报销表 Excel（金额取发票实际金额，无发票明细回退到申请预估价）
+     */
+    @Override
+    public byte[] buildReimburseExcelBytes(Long id, List<BigDecimal> invoiceAmounts) {
+        PmsProcurementRequestVo vo = queryById(id);
+        if (ObjectUtil.isNull(vo)) {
+            throw new ServiceException("采购申请不存在");
+        }
+        try {
+            ClassPathResource tpl = new ClassPathResource("templates/最终模板.xlsx");
+            try (Workbook wb = WorkbookFactory.create(tpl.getInputStream())) {
+                Sheet sheet = wb.getSheetAt(0);
+
+                SysUser applicantUser = userMapper.selectById(vo.getCreateBy());
+                String applicantName = applicantUser == null ? "" :
+                    StringUtils.isNotBlank(applicantUser.getNickName()) ? applicantUser.getNickName() : applicantUser.getUserName();
+
+                String projectBelong = "长三角物理研究中心";
+                Long projectId = vo.getProjectId();
+                if (projectId != null && isInSpecialProjectTree(projectId)) {
+                    Row row1 = sheet.getRow(0);
+                    if (row1 != null && row1.getCell(0) != null) {
+                        projectBelong = row1.getCell(0).getStringCellValue();
+                    }
+                }
+                setCell(sheet, 0, 0, projectBelong);
+
+                Row a1Row = sheet.getRow(0);
+                if (a1Row != null && a1Row.getCell(0) != null) {
+                    org.apache.poi.ss.usermodel.Font blackFont = wb.createFont();
+                    blackFont.setFontName("仿宋");
+                    blackFont.setFontHeightInPoints((short) 18);
+                    blackFont.setBold(true);
+                    blackFont.setColor(org.apache.poi.ss.usermodel.IndexedColors.BLACK.getIndex());
+                    org.apache.poi.ss.usermodel.CellStyle a1Style = wb.createCellStyle();
+                    a1Style.cloneStyleFrom(a1Row.getCell(0).getCellStyle());
+                    a1Style.setFont(blackFont);
+                    a1Row.getCell(0).setCellStyle(a1Style);
+                }
+
+                setCell(sheet, 2, 2, applicantName);
+
+                int start = 7;
+                int lastRow = sheet.getLastRowNum();
+                for (int r = start; r <= lastRow; r++) {
+                    Row row = sheet.getRow(r);
+                    if (row != null) {
+                        for (int c = row.getFirstCellNum(); c < row.getLastCellNum(); c++) {
+                            org.apache.poi.ss.usermodel.Cell cell = row.getCell(c);
+                            if (cell != null) {
+                                cell.setCellValue("");
+                                cell.setHyperlink(null);
+                            }
+                        }
+                    }
+                }
+
+                List<PmsProcurementRequestItemVo> items = vo.getItems();
+                if (CollUtil.isNotEmpty(items)) {
+                    int rowIdx = start;
+                    int seq = 1;
+                    int invoiceIdx = 0;
+                    for (PmsProcurementRequestItemVo item : items) {
+                        BigDecimal qty = ObjectUtil.isNull(item.getQuantity()) ? BigDecimal.ZERO : item.getQuantity();
+                        BigDecimal price = ObjectUtil.isNull(item.getUnitPrice()) ? BigDecimal.ZERO : item.getUnitPrice();
+                        BigDecimal baseAmount = qty.multiply(price);
+
+                        // 预估总价：<100 则 +10，>=100 则 *1.3
+                        BigDecimal estimatedAmount;
+                        if (baseAmount.compareTo(BigDecimal.valueOf(100)) < 0) {
+                            estimatedAmount = baseAmount.add(BigDecimal.valueOf(10));
+                        } else {
+                            estimatedAmount = baseAmount.multiply(BigDecimal.valueOf(1.3));
+                        }
+                        estimatedAmount = estimatedAmount.setScale(2, java.math.RoundingMode.HALF_UP);
+
+                        // 实际金额：优先发票，无则回退到预估
+                        BigDecimal actualAmount = null;
+                        if (invoiceAmounts != null && invoiceIdx < invoiceAmounts.size()) {
+                            actualAmount = invoiceAmounts.get(invoiceIdx++);
+                        }
+                        if (actualAmount == null) {
+                            actualAmount = estimatedAmount;
+                        }
+                        actualAmount = actualAmount.setScale(2, java.math.RoundingMode.HALF_UP);
+
+                        setCell(sheet, rowIdx, 0, seq++);
+                        setCell(sheet, rowIdx, 1, item.getPurchaseType());
+                        setCell(sheet, rowIdx, 2, item.getCategory1());
+                        setCell(sheet, rowIdx, 3, item.getCategory2());
+                        setCell(sheet, rowIdx, 4, projectBelong);
+                        setCell(sheet, rowIdx, 5, item.getItemName());
+                        setCell(sheet, rowIdx, 6, item.getUnit());
+                        setCell(sheet, rowIdx, 7, qty.doubleValue());
+                        setCell(sheet, rowIdx, 8, item.getSpec());
+                        setCell(sheet, rowIdx, 9, item.getBrand());
+                        // K 实际单价 = 实际总价 / 数量；L 实际总价 = 发票金额或预估
+                        if (qty.compareTo(BigDecimal.ZERO) > 0) {
+                            setCell(sheet, rowIdx, 10, actualAmount.divide(qty, 2, java.math.RoundingMode.HALF_UP).doubleValue());
+                        }
+                        setCell(sheet, rowIdx, 11, actualAmount.doubleValue());
+                        setCell(sheet, rowIdx, 12, estimatedAmount.doubleValue());
+                        setCell(sheet, rowIdx, 13, applicantName);
+                        setCell(sheet, rowIdx, 14, applicantName);
+                        setCell(sheet, rowIdx, 15, item.getMaterialUsage());
+                        String rowReason = StringUtils.isNotBlank(item.getPurchaseReason())
+                            ? item.getPurchaseReason() : vo.getApplyReason();
+                        setCell(sheet, rowIdx, 16, rowReason);
+                        // R 列：对公写公司名，自购写链接
+                        if ("对公".equals(vo.getTitleType())) {
+                            String companyName = StringUtils.isNotBlank(vo.getCompanyName()) ? vo.getCompanyName() : "";
+                            setCell(sheet, rowIdx, 17, companyName);
+                        } else {
+                            setHyperLink(sheet, rowIdx, 17, item.getLink());
+                        }
+                        rowIdx++;
+                    }
+                }
+
+                try (java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream()) {
+                    wb.write(bos);
+                    return bos.toByteArray();
+                }
+            }
+        } catch (IOException e) {
+            log.error("生成报销表 Excel 失败", e);
+            throw new ServiceException("生成报销表 Excel 失败：" + e.getMessage());
+        }
     }
 
 }
