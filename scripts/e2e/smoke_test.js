@@ -16,8 +16,10 @@ const PAGES = [
 ];
 
 (async () => {
-  const browser = await launch();
-  const { ctx, p } = await login(browser, 'fengzhongjun', '666666');
+  let browser;
+  try {
+    browser = await launch();
+    const { ctx, p } = await login(browser, 'fengzhongjun', '666666');
   console.log('✔ 登录成功（冯忠俊）');
 
   let allOk = true;
@@ -36,11 +38,12 @@ const PAGES = [
     await shot(p, `smoke-${page.name}`);
   }
 
-  await browser.close();
-  console.log(allOk ? '\n🎉 冒烟测试全部通过' : '\n💥 冒烟测试存在异常');
-  process.exit(allOk ? 0 : 1);
-})().catch(async (e) => {
-  console.error('\n💥 冒烟测试失败：', e.message);
-  await browser.close().catch(() => {});
-  process.exit(1);
-});
+    await browser.close();
+    console.log(allOk ? '\n🎉 冒烟测试全部通过' : '\n💥 冒烟测试存在异常');
+    process.exit(allOk ? 0 : 1);
+  } catch (e) {
+    console.error('\n💥 冒烟测试失败：', e.message);
+    if (browser) await browser.close().catch(() => {});
+    process.exit(1);
+  }
+})();
